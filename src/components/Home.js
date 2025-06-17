@@ -1,6 +1,10 @@
 import React from "react";
 import { Container, Row, Col, Button, Form, InputGroup, Card, Stack } from "react-bootstrap";
 import { FaBars, FaShoppingCart, FaSearch } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../AuthContext";
+import Logout from "./Logout";
+import logo from "../img/logo.png"; // Ajustá la ruta si es necesario
 
 const productos = [
   { nombre: "Caña Pro", descripcion: "Caña de pescar profesional - $25.000" },
@@ -10,16 +14,19 @@ const productos = [
 ];
 
 export default function Home() {
+  const navigate = useNavigate();
+  const { user } = useAuth(); // Obtené el usuario logueado
+
   return (
     <Container
       fluid
       className="min-vh-100 py-4 px-2"
       style={{
-        background: "linear-gradient(135deg, #232526 0%, #414345 100%)",
-        border: "2px solid #b3e0ff",
+        background: "#e0f7fa", // Fondo celeste claro como el logo
+        border: "2px solid #0097a7",
         borderRadius: "24px",
-        boxShadow: "0 0 24px #0008",
-        color: "#e3f6ff",
+        boxShadow: "0 0 24px #0097a755",
+        color: "#01579b",
         fontFamily: "Fira Mono, monospace",
       }}
     >
@@ -34,33 +41,58 @@ export default function Home() {
           </span>
         </Col>
         <Col className="text-center">
-          <Button
-            variant="info"
-            size="lg"
-            style={{
-              borderRadius: "18px",
-              fontWeight: "bold",
-              fontSize: "2.2rem",
-              padding: "0.5em 2.5em",
-              color: "#232526",
-              boxShadow: "0 2px 12px #b3e0ff55",
-              border: "none",
-              letterSpacing: 2,
-              pointerEvents: "none",
-            }}
-            disabled
-          >
-            Pescasr
-          </Button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <img
+              src={logo}
+              alt="Logo"
+              style={{
+                height: "54px",
+                marginRight: "16px",
+                filter: "drop-shadow(0 2px 6px #0097a7aa)",
+              }}
+            />
+            <span
+  style={{
+    fontFamily: "'Montserrat', 'Fira Mono', monospace",
+    fontWeight: 900,
+    fontSize: "2.8rem",
+    color: "#ff3d00", // Naranja fuerte para resaltar
+    letterSpacing: 2,
+    textShadow: "0 2px 8px #fff, 0 1px 0 #0097a7, 0 0 12px #ffccbc",
+    // Quitamos el gradiente y el WebkitTextFillColor
+  }}
+>
+              Pescasr
+            </span>
+          </div>
         </Col>
         <Col xs="auto" className="d-flex align-items-center justify-content-end">
           <Stack direction="horizontal" gap={2}>
-            <Button variant="outline-light" style={{ fontWeight: "bold", borderRadius: "12px" }}>
-              Login
-            </Button>
-            <Button variant="info" style={{ fontWeight: "bold", borderRadius: "12px", color: "#232526" }}>
-              Registro
-            </Button>
+            {!user ? (
+              <>
+                <Button
+                  variant="outline-info"
+                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#0097a7", border: "2px solid #0097a7" }}
+                  onClick={() => navigate("/login")}
+                >
+                  Login
+                </Button>
+                <Button
+                  variant="info"
+                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#fff", background: "#0097a7", border: "none" }}
+                  onClick={() => navigate("/register")}
+                >
+                  Registro
+                </Button>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: "bold", color: "#0097a7" }}>
+                  ¡Hola, {user.username}!
+                </span>
+                <Logout />
+              </>
+            )}
             <Button variant="outline-info" style={{ border: "none" }}>
               <FaShoppingCart size={30} />
             </Button>
