@@ -11,6 +11,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        {/* Quitamos el container y el cartel */}
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/login" element={<Login />} />
