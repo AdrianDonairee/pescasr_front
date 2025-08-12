@@ -1,7 +1,7 @@
 import React from "react";
-import Home from "./components/Home";
-import Login from "./components/Login";
-import Register from "./components/Register";
+import Home from "./components/view/Home";
+import Login from "./components/view/Login";
+import Register from "./components/view/Register";
 //import ProtectedRoute from "./components/ProtectedRoute";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./AuthContext";

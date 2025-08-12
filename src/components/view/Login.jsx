@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useAuth } from "../AuthContext";
+import { useAuth } from "../../AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import { Container, Card, Button } from "react-bootstrap";
 
