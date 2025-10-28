@@ -13,13 +13,14 @@ export default function Register() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = register(form.username, form.password);
-    if (ok) {
+    setError("");
+    const res = await register(form.username, form.password);
+    if (res.ok) {
       navigate("/home");
     } else {
-      setError("El usuario ya existe");
+      setError(res.message || "El usuario ya existe");
     }
   };
 

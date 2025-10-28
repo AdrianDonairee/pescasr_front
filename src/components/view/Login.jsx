@@ -13,13 +13,14 @@ export default function Login() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = login(form.username, form.password);
-    if (ok) {
+    setError("");
+    const res = await login(form.username, form.password);
+    if (res.ok) {
       navigate("/home");
     } else {
-      setError("Usuario o contraseña incorrectos");
+      setError(res.message || "Usuario o contraseña incorrectos");
     }
   };
 

@@ -1,23 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Container, Row, Col, Button, Form, InputGroup, Card, Stack, Dropdown, ListGroup, Modal
 } from "react-bootstrap";
 import { FaBars, FaShoppingCart, FaSearch, FaTrashAlt, FaPlus, FaMinus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../AuthContext"; // 
+import { useAuth } from "../../AuthContext";
 import Logout from "./Logout";
-import logo from "../../img/logo.png"; // 
-
-const productos = [
-  { nombre: "Caña Pro", descripcion: "Caña de pescar profesional - $25.000", categoria: "Cañas", precio: 25000 },
-  { nombre: "Caña Básica", descripcion: "Caña para principiantes - $10.000", categoria: "Cañas", precio: 10000 },
-  { nombre: "Reel Ultra", descripcion: "Reel metálico - $18.000", categoria: "Reels", precio: 18000 },
-  { nombre: "Reel Compacto", descripcion: "Reel compacto - $12.000", categoria: "Reels", precio: 12000 },
-  { nombre: "Señuelo X", descripcion: "Señuelo flotante - $3.500", categoria: "Señuelos", precio: 3500 },
-  { nombre: "Señuelo Y", descripcion: "Señuelo hundido - $4.000", categoria: "Señuelos", precio: 4000 },
-  { nombre: "Kit Básico", descripcion: "Kit inicial - $9.000", categoria: "Kits", precio: 9000 },
-  { nombre: "Kit Pro", descripcion: "Kit profesional - $20.000", categoria: "Kits", precio: 20000 },
-];
+import logo from "../../img/logo.png";
+import { getProducts, createOrder } from "../../services/api";
 
 const categorias = ["Cañas", "Reels", "Señuelos", "Kits"];
 
@@ -30,6 +20,48 @@ export default function Home() {
   const [sugerencias, setSugerencias] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  const productosHardcode = [
+    { nombre: "Caña Pro", descripcion: "Caña de pescar profesional - $25.000", categoria: "Cañas", precio: 25000 },
+    { nombre: "Caña Básica", descripcion: "Caña para principiantes - $10.000", categoria: "Cañas", precio: 10000 },
+    { nombre: "Reel Ultra", descripcion: "Reel metálico - $18.000", categoria: "Reels", precio: 18000 },
+    { nombre: "Reel Compacto", descripcion: "Reel compacto - $12.000", categoria: "Reels", precio: 12000 },
+    { nombre: "Señuelo X", descripcion: "Señuelo flotante - $3.500", categoria: "Señuelos", precio: 3500 },
+    { nombre: "Señuelo Y", descripcion: "Señuelo hundido - $4.000", categoria: "Señuelos", precio: 4000 },
+    { nombre: "Kit Básico", descripcion: "Kit inicial - $9.000", categoria: "Kits", precio: 9000 },
+    { nombre: "Kit Pro", descripcion: "Kit profesional - $20.000", categoria: "Kits", precio: 20000 },
+  ];
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchProducts = async () => {
+      setCargando(true);
+      try {
+        const data = await getProducts();
+        if (mounted && Array.isArray(data)) {
+          // normalizar a la estructura esperada si viene distinto
+          const mapped = data.map((p) => ({
+            nombre: p.nombre || p.name || p.title,
+            descripcion: p.descripcion || p.description || "",
+            categoria: p.categoria || p.category || "Otros",
+            precio: p.precio || p.price || 0,
+          }));
+          setProductos(mapped);
+        } else if (mounted) {
+          setProductos(productosHardcode);
+        }
+      } catch (err) {
+        // si falla backend, usar hardcode para no romper UI
+        setProductos(productosHardcode);
+      } finally {
+        if (mounted) setCargando(false);
+      }
+    };
+    fetchProducts();
+    return () => { mounted = false; };
+  }, []);
 
   // Filtrar productos por categoría
   const productosFiltrados = categoriaSeleccionada
@@ -109,6 +141,24 @@ export default function Home() {
     0
   );
 
+  const handleFinalizarCompra = async () => {
+    if (carrito.length === 0) return;
+    try {
+      const order = {
+        items: carrito.map((c) => ({ nombre: c.nombre, cantidad: c.cantidad, precio: c.precio })),
+        total: totalCarrito,
+        user: user ? user.username : undefined,
+        date: new Date().toISOString(),
+      };
+      await createOrder(order);
+      setCarrito([]);
+      setMostrarCarrito(false);
+      alert("¡Gracias por tu compra!");
+    } catch (err) {
+      alert("Error al procesar la compra: " + (err.message || "Intente nuevamente"));
+    }
+  };
+
   return (
     <Container
       fluid
@@ -122,7 +172,7 @@ export default function Home() {
         fontFamily: "Fira Mono, monospace",
       }}
     >
-      {/* Navbar superior */}
+      {/* Navbar superior */} 
       <Row className="align-items-center mb-4">
         <Col xs="auto" className="d-flex align-items-center">
           <Dropdown>
@@ -266,7 +316,11 @@ export default function Home() {
 
       {/* Productos */}
       <Row className="justify-content-center">
-        {productosAMostrar.length === 0 ? (
+        {cargando ? (
+          <Col>
+            <p>Cargando productos...</p>
+          </Col>
+        ) : productosAMostrar.length === 0 ? (
           <Col>
             <p>No se encontraron productos.</p>
           </Col>
@@ -409,7 +463,7 @@ export default function Home() {
             variant="success"
             style={{ borderRadius: "12px", fontWeight: "bold" }}
             disabled={carrito.length === 0}
-            onClick={() => alert("¡Gracias por tu compra!")}
+            onClick={handleFinalizarCompra}
           >
             Finalizar compra
           </Button>
