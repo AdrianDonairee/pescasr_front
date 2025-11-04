@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Container, Row, Col, Button, Form, InputGroup, Card, Stack, Dropdown, ListGroup, Modal
 } from "react-bootstrap";
@@ -7,68 +7,136 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import Logout from "./Logout";
 import logo from "../../img/logo.png";
-import { getProducts, createOrder } from "../../services/api";
-
-const categorias = ["Cañas", "Reels", "Señuelos", "Kits"];
+import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
 
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null); // guardará category id o null
   const [busqueda, setBusqueda] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
   const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  const productosHardcode = [
-    { nombre: "Caña Pro", descripcion: "Caña de pescar profesional - $25.000", categoria: "Cañas", precio: 25000 },
-    { nombre: "Caña Básica", descripcion: "Caña para principiantes - $10.000", categoria: "Cañas", precio: 10000 },
-    { nombre: "Reel Ultra", descripcion: "Reel metálico - $18.000", categoria: "Reels", precio: 18000 },
-    { nombre: "Reel Compacto", descripcion: "Reel compacto - $12.000", categoria: "Reels", precio: 12000 },
-    { nombre: "Señuelo X", descripcion: "Señuelo flotante - $3.500", categoria: "Señuelos", precio: 3500 },
-    { nombre: "Señuelo Y", descripcion: "Señuelo hundido - $4.000", categoria: "Señuelos", precio: 4000 },
-    { nombre: "Kit Básico", descripcion: "Kit inicial - $9.000", categoria: "Kits", precio: 9000 },
-    { nombre: "Kit Pro", descripcion: "Kit profesional - $20.000", categoria: "Kits", precio: 20000 },
-  ];
+  const saveTimeout = useRef(null);
+  const prevServerCartCountRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
-    const fetchProducts = async () => {
+    const fetchAll = async () => {
       setCargando(true);
       try {
-        const data = await getProducts();
-        if (mounted && Array.isArray(data)) {
-          // normalizar a la estructura esperada si viene distinto
-          const mapped = data.map((p) => ({
-            nombre: p.nombre || p.name || p.title,
-            descripcion: p.descripcion || p.description || "",
-            categoria: p.categoria || p.category || "Otros",
-            precio: p.precio || p.price || 0,
-          }));
-          setProductos(mapped);
-        } else if (mounted) {
-          setProductos(productosHardcode);
-        }
+        const [dataProducts, dataCats] = await Promise.all([getProducts(), getCategories()]);
+        const cats = Array.isArray(dataCats) ? dataCats : [];
+        if (!mounted) return;
+
+        setCategorias(cats);
+
+        const mapped = (Array.isArray(dataProducts) ? dataProducts : []).map((p) => {
+          const categoriaObj = p.categoria && typeof p.categoria === "object" ? p.categoria : null;
+          const categoriaNombre = categoriaObj ? (categoriaObj.nombre || categoriaObj.name) : (p.categoria || p.category || p.categoria_producto || "Otros");
+          const categoria_id = categoriaObj ? categoriaObj.id : (p.categoria_id ?? null);
+          return {
+            id: p.id ?? p.pk ?? null,
+            nombre: p.nombre || p.name || p.title || p.titulo || p.producto || "",
+            descripcion: p.descripcion || p.description || p.desc || p.detail || "",
+            categoria: categoriaNombre,
+            categoria_id: categoria_id,
+            precio: Number(p.precio ?? p.price ?? p.valor ?? 0) || 0,
+            stock: p.stock ?? p.cantidad ?? 0,
+          };
+        });
+
+        setProductos(mapped);
       } catch (err) {
-        // si falla backend, usar hardcode para no romper UI
-        setProductos(productosHardcode);
+        console.error("Error cargando productos/categorias:", err);
+        setProductos([]); setCategorias([]);
       } finally {
         if (mounted) setCargando(false);
       }
     };
-    fetchProducts();
+    fetchAll();
     return () => { mounted = false; };
   }, []);
 
-  // Filtrar productos por categoría
+  // carrito init (igual que antes)
+  useEffect(() => {
+    try {
+      if (user) {
+        const serverCart = JSON.parse(localStorage.getItem("cart_server") || "[]");
+        prevServerCartCountRef.current = Array.isArray(serverCart) ? serverCart.length : 0;
+        if (Array.isArray(serverCart) && serverCart.length > 0) {
+          const mapped = serverCart.map((it) => ({
+            nombre: it.producto?.nombre || it.producto?.name || "",
+            descripcion: it.producto?.descripcion || it.producto?.description || "",
+            categoria: it.producto?.categoria && typeof it.producto.categoria === "object" ? (it.producto.categoria.nombre || it.producto.categoria.name) : (it.producto?.categoria || "Otros"),
+            precio: Number(it.producto?.precio ?? it.producto?.price ?? 0) || 0,
+            cantidad: it.cantidad || 1,
+            producto_id: it.producto?.id || null,
+            id: it.producto?.id || null,
+          }));
+          setCarrito(mapped);
+          return;
+        }
+      }
+      const local = JSON.parse(localStorage.getItem("cart_local") || "[]");
+      setCarrito(Array.isArray(local) ? local : []);
+    } catch (e) {
+      setCarrito([]);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    try { localStorage.setItem("cart_local", JSON.stringify(carrito || [])); } catch (e) {}
+    if (!user) return;
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(async () => {
+      try {
+        const itemsWithIds = (carrito || []).map((c) => ({
+          producto_id: c.producto_id || c.id || null,
+          cantidad: c.cantidad || 1,
+        })).filter(i => i.producto_id);
+
+        if (itemsWithIds.length > 0) {
+          const res = await saveCart(itemsWithIds);
+          const serverItems = res && res.items ? res.items : null;
+          if (serverItems) {
+            localStorage.setItem("cart_server", JSON.stringify(serverItems));
+            prevServerCartCountRef.current = serverItems.length;
+          } else {
+            const serverCache = itemsWithIds.map(i => {
+              const p = carrito.find(c => (c.producto_id || c.id) === i.producto_id) || {};
+              return { producto: { id: i.producto_id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, categoria: p.categoria }, cantidad: i.cantidad, total: String((Number(p.precio) || 0) * i.cantidad) };
+            });
+            localStorage.setItem("cart_server", JSON.stringify(serverCache));
+            prevServerCartCountRef.current = serverCache.length;
+          }
+          return;
+        }
+
+        if ((carrito || []).length === 0 && prevServerCartCountRef.current > 0) {
+          await saveCart([]);
+          localStorage.setItem("cart_server", JSON.stringify([]));
+          prevServerCartCountRef.current = 0;
+        }
+      } catch (e) {
+        console.error("Error sincronizando carrito con servidor:", e);
+      }
+    }, 700);
+
+    return () => { if (saveTimeout.current) clearTimeout(saveTimeout.current); };
+  }, [carrito, user]);
+
+  // filtrado por categoria: ahora categoriaSeleccionada guarda id (number) o null
   const productosFiltrados = categoriaSeleccionada
-    ? productos.filter((p) => p.categoria === categoriaSeleccionada)
+    ? productos.filter((p) => Number(p.categoria_id) === Number(categoriaSeleccionada))
     : productos;
 
-  // Filtrar sugerencias de búsqueda
   const handleBusqueda = (e) => {
     const valor = e.target.value;
     setBusqueda(valor);
@@ -82,21 +150,18 @@ export default function Home() {
     }
   };
 
-  // Al hacer click en sugerencia
   const handleSugerenciaClick = (nombre) => {
     setBusqueda(nombre);
     setSugerencias([]);
     setCategoriaSeleccionada(null);
   };
 
-  // Al seleccionar categoría
-  const handleCategoria = (cat) => {
-    setCategoriaSeleccionada(cat);
+  const handleCategoria = (catId) => {
+    setCategoriaSeleccionada(catId);
     setBusqueda("");
     setSugerencias([]);
   };
 
-  // Productos a mostrar (por búsqueda o por categoría)
   const productosAMostrar =
     busqueda.length > 0
       ? productos.filter((p) =>
@@ -104,32 +169,47 @@ export default function Home() {
         )
       : productosFiltrados;
 
-  // Carrito
   const agregarAlCarrito = (producto) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     setCarrito((prev) => {
-      const existe = prev.find((item) => item.nombre === producto.nombre);
+      const existe = prev.find((item) => (item.producto_id ?? item.id) === (producto.producto_id ?? producto.id));
       if (existe) {
         return prev.map((item) =>
-          item.nombre === producto.nombre
-            ? { ...item, cantidad: item.cantidad + 1 }
+          (item.producto_id ?? item.id) === (producto.producto_id ?? producto.id)
+            ? { ...item, cantidad: (item.cantidad || 0) + 1 }
             : item
         );
       } else {
-        return [...prev, { ...producto, cantidad: 1 }];
+        return [...prev, {
+          ...producto,
+          cantidad: 1,
+          producto_id: producto.id ?? producto.producto_id ?? null
+        }];
       }
     });
   };
 
   const quitarDelCarrito = (nombre) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     setCarrito((prev) => prev.filter((item) => item.nombre !== nombre));
   };
 
   const cambiarCantidad = (nombre, delta) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     setCarrito((prev) =>
       prev
         .map((item) =>
           item.nombre === nombre
-            ? { ...item, cantidad: Math.max(1, item.cantidad + delta) }
+            ? { ...item, cantidad: Math.max(1, (item.cantidad || 0) + delta) }
             : item
         )
         .filter((item) => item.cantidad > 0)
@@ -137,15 +217,19 @@ export default function Home() {
   };
 
   const totalCarrito = carrito.reduce(
-    (acc, item) => acc + item.precio * item.cantidad,
+    (acc, item) => acc + (Number(item.precio) || 0) * (item.cantidad || 0),
     0
   );
 
   const handleFinalizarCompra = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     if (carrito.length === 0) return;
     try {
       const order = {
-        items: carrito.map((c) => ({ nombre: c.nombre, cantidad: c.cantidad, precio: c.precio })),
+        items: carrito.map((c) => ({ producto_id: c.producto_id || c.id, cantidad: c.cantidad, precio: c.precio })),
         total: totalCarrito,
         user: user ? user.username : undefined,
         date: new Date().toISOString(),
@@ -154,6 +238,9 @@ export default function Home() {
       setCarrito([]);
       setMostrarCarrito(false);
       alert("¡Gracias por tu compra!");
+      localStorage.setItem("cart_server", JSON.stringify([]));
+      localStorage.setItem("cart_local", JSON.stringify([]));
+      prevServerCartCountRef.current = 0;
     } catch (err) {
       alert("Error al procesar la compra: " + (err.message || "Intente nuevamente"));
     }
@@ -172,7 +259,6 @@ export default function Home() {
         fontFamily: "Fira Mono, monospace",
       }}
     >
-      {/* Navbar superior */} 
       <Row className="align-items-center mb-4">
         <Col xs="auto" className="d-flex align-items-center">
           <Dropdown>
@@ -183,19 +269,36 @@ export default function Home() {
               </span>
             </Dropdown.Toggle>
             <Dropdown.Menu>
-              {categorias.map((cat) => (
-                <Dropdown.Item
-                  key={cat}
-                  onClick={() => handleCategoria(cat)}
-                  active={categoriaSeleccionada === cat}
-                >
-                  {cat}
-                </Dropdown.Item>
-              ))}
-              <Dropdown.Divider />
-              <Dropdown.Item onClick={() => setCategoriaSeleccionada(null)}>
+              <Dropdown.Item
+                key="todas"
+                onClick={() => handleCategoria(null)}
+                active={categoriaSeleccionada === null}
+              >
                 Todas
               </Dropdown.Item>
+              <Dropdown.Divider />
+              {categorias.length === 0 ? (
+                // fallback: mostrar algunas categorias hardcode si no hay backend
+                ["Cañas", "Reels", "Señuelos", "Kits"].map((cat) => (
+                  <Dropdown.Item
+                    key={cat}
+                    onClick={() => handleCategoria(cat)}
+                    active={categoriaSeleccionada === cat}
+                  >
+                    {cat}
+                  </Dropdown.Item>
+                ))
+              ) : (
+                categorias.map((cat) => (
+                  <Dropdown.Item
+                    key={cat.id}
+                    onClick={() => handleCategoria(cat.id)}
+                    active={categoriaSeleccionada === cat.id}
+                  >
+                    {cat.nombre ?? cat.name}
+                  </Dropdown.Item>
+                ))
+              )}
             </Dropdown.Menu>
           </Dropdown>
         </Col>
@@ -233,14 +336,14 @@ export default function Home() {
                   style={{ fontWeight: "bold", borderRadius: "12px", color: "#0097a7", border: "2px solid #0097a7" }}
                   onClick={() => navigate("/login")}
                 >
-                  Login
+                  Iniciar sesion
                 </Button>
                 <Button
                   variant="info"
                   style={{ fontWeight: "bold", borderRadius: "12px", color: "#fff", background: "#0097a7", border: "none" }}
                   onClick={() => navigate("/register")}
                 >
-                  Registro
+                  Registrarse
                 </Button>
               </>
             ) : (
@@ -254,7 +357,11 @@ export default function Home() {
             <Button
               variant="outline-info"
               style={{ border: "none", position: "relative" }}
-              onClick={() => setMostrarCarrito(true)}
+              onClick={() => {
+                if (!user) setShowLoginModal(true);
+                else setMostrarCarrito(true);
+              }}
+              disabled={!user}
             >
               <FaShoppingCart size={30} />
               {carrito.length > 0 && (
@@ -274,7 +381,7 @@ export default function Home() {
                     justifyContent: "center",
                   }}
                 >
-                  {carrito.reduce((acc, item) => acc + item.cantidad, 0)}
+                  {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
                 </span>
               )}
             </Button>
@@ -282,7 +389,6 @@ export default function Home() {
         </Col>
       </Row>
 
-      {/* Buscador */}
       <Row className="justify-content-center mb-5 position-relative">
         <Col md={8}>
           <InputGroup>
@@ -314,7 +420,6 @@ export default function Home() {
         </Col>
       </Row>
 
-      {/* Productos */}
       <Row className="justify-content-center">
         {cargando ? (
           <Col>
@@ -353,7 +458,11 @@ export default function Home() {
                   <Button
                     variant="success"
                     style={{ borderRadius: "12px", fontWeight: "bold" }}
-                    onClick={() => agregarAlCarrito(prod)}
+                    onClick={() => {
+                      if (!user) setShowLoginModal(true);
+                      else agregarAlCarrito(prod);
+                    }}
+                    disabled={!user}
                   >
                     Comprar
                   </Button>
@@ -364,7 +473,6 @@ export default function Home() {
         )}
       </Row>
 
-      {/* Modal Carrito */}
       <Modal
         show={mostrarCarrito}
         onHide={() => setMostrarCarrito(false)}
@@ -411,7 +519,7 @@ export default function Home() {
                     <span style={{ fontWeight: "bold" }}>{item.nombre}</span>
                     <span className="badge bg-info ms-2">{item.categoria}</span>
                     <div style={{ fontSize: "0.95rem", color: "#0097a7" }}>
-                      ${item.precio.toLocaleString("es-AR")}
+                      ${Number(item.precio).toLocaleString("es-AR")}
                     </div>
                   </div>
                   <div className="d-flex align-items-center">
@@ -420,7 +528,7 @@ export default function Home() {
                       size="sm"
                       className="me-2"
                       onClick={() => cambiarCantidad(item.nombre, -1)}
-                      disabled={item.cantidad === 1}
+                      disabled={!user || item.cantidad === 1}
                     >
                       <FaMinus />
                     </Button>
@@ -430,6 +538,7 @@ export default function Home() {
                       size="sm"
                       className="ms-2"
                       onClick={() => cambiarCantidad(item.nombre, 1)}
+                      disabled={!user}
                     >
                       <FaPlus />
                     </Button>
@@ -438,6 +547,7 @@ export default function Home() {
                       size="sm"
                       className="ms-3"
                       onClick={() => quitarDelCarrito(item.nombre)}
+                      disabled={!user}
                     >
                       <FaTrashAlt />
                     </Button>
@@ -462,10 +572,27 @@ export default function Home() {
           <Button
             variant="success"
             style={{ borderRadius: "12px", fontWeight: "bold" }}
-            disabled={carrito.length === 0}
+            disabled={carrito.length === 0 || !user}
             onClick={handleFinalizarCompra}
           >
             Finalizar compra
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showLoginModal} onHide={() => setShowLoginModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Iniciar sesión requerido</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>Debes iniciar sesión para usar el carrito. ¿Querés iniciar sesión o registrarte?</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>
+            Registrarse
+          </Button>
+          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>
+            Iniciar sesión
           </Button>
         </Modal.Footer>
       </Modal>
