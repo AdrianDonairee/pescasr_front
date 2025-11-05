@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useAuth } from "../../AuthContext";
 import { useNavigate, Link } from "react-router-dom";
-import { Container, Card, Button } from "react-bootstrap";
+import { Container, Button } from "react-bootstrap";
+import "./Home.css";
 
 export default function Login() {
   const { login } = useAuth();
@@ -17,114 +18,50 @@ export default function Login() {
     e.preventDefault();
     setError("");
     const res = await login(form.username, form.password);
-    if (res.ok) {
+    if (res && res.ok) {
       navigate("/home");
     } else {
-      setError(res.message || "Usuario o contraseña incorrectos");
+      setError((res && res.message) || "Usuario o contraseña incorrectos");
     }
   };
 
   return (
     <Container
       fluid
-      className="min-vh-100 d-flex align-items-center justify-content-center"
-      style={{
-        background: "#e0f7fa",
-        fontFamily: "'Fira Mono', monospace",
-      }}
+      className="min-vh-100 d-flex align-items-center justify-content-center futuristic-container"
     >
-      <Card
-        style={{
-          minWidth: 350,
-          maxWidth: 400,
-          padding: "2rem",
-          borderRadius: "24px",
-          border: "2px solid #0097a7",
-          boxShadow: "0 0 24px #0097a755",
-          background: "#fff",
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "'Montserrat', 'Fira Mono', monospace",
-            fontWeight: 900,
-            fontSize: "2rem",
-            color: "#0097a7",
-            letterSpacing: 2,
-            textAlign: "center",
-            marginBottom: "1.5rem",
-          }}
-        >
-          Iniciar sesión
-        </h2>
+      <div className="auth-card">
+        <h2>Iniciar sesión</h2>
         <form onSubmit={handleSubmit}>
           <input
+            className="auth-input"
             type="text"
             name="username"
             placeholder="Usuario"
             value={form.username}
             onChange={handleChange}
             required
-            style={{
-              width: "100%",
-              marginBottom: "1rem",
-              padding: "0.7rem",
-              borderRadius: "12px",
-              border: "1px solid #0097a7",
-              fontSize: "1.1rem",
-            }}
           />
           <input
+            className="auth-input"
             type="password"
             name="password"
             placeholder="Contraseña"
             value={form.password}
             onChange={handleChange}
             required
-            style={{
-              width: "100%",
-              marginBottom: "1rem",
-              padding: "0.7rem",
-              borderRadius: "12px",
-              border: "1px solid #0097a7",
-              fontSize: "1.1rem",
-            }}
           />
-          <Button
-            type="submit"
-            variant="info"
-            style={{
-              width: "100%",
-              fontWeight: "bold",
-              borderRadius: "12px",
-              color: "#fff",
-              background: "#0097a7",
-              border: "none",
-              marginBottom: "1rem",
-            }}
-          >
-            Ingresar
-          </Button>
-          {error && <p style={{ color: "red", textAlign: "center" }}>{error}</p>}
+          {error && <p style={{ color: "#ff7b7b", textAlign: "center" }}>{error}</p>}
+          <div className="auth-actions">
+            <Button type="submit" className="solid-btn">Ingresar</Button>
+            <Button variant="outline-light" className="glass-btn" onClick={() => navigate("/home")}>Volver</Button>
+          </div>
         </form>
-        <p style={{ textAlign: "center" }}>
+
+        <p style={{ textAlign: "center", marginTop: "1rem" }}>
           ¿No tenés cuenta? <Link to="/register">Registrate</Link>
         </p>
-        <Button
-          variant="outline-info"
-          style={{
-            width: "100%",
-            fontWeight: "bold",
-            borderRadius: "12px",
-            color: "#0097a7",
-            border: "2px solid #0097a7",
-            marginTop: "0.5rem",
-          }}
-          onClick={() => navigate("/home")}
-        >
-          Volver a Home
-        </Button>
-      </Card>
+      </div>
     </Container>
   );
 }

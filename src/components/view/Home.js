@@ -2,18 +2,19 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   Container, Row, Col, Button, Form, InputGroup, Card, Stack, Dropdown, ListGroup, Modal
 } from "react-bootstrap";
-import { FaBars, FaShoppingCart, FaSearch, FaTrashAlt, FaPlus, FaMinus } from "react-icons/fa";
+import { FaBars, FaShoppingCart, FaSearch } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import Logout from "./Logout";
 import logo from "../../img/logo.png";
 import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
+import "./Home.css";
 
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null); // guardará category id o null
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [carrito, setCarrito] = useState([]);
@@ -22,6 +23,10 @@ export default function Home() {
   const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // nuevo: detalle producto
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showProductModal, setShowProductModal] = useState(false);
 
   const saveTimeout = useRef(null);
   const prevServerCartCountRef = useRef(0);
@@ -64,7 +69,6 @@ export default function Home() {
     return () => { mounted = false; };
   }, []);
 
-  // carrito init (igual que antes)
   useEffect(() => {
     try {
       if (user) {
@@ -132,7 +136,6 @@ export default function Home() {
     return () => { if (saveTimeout.current) clearTimeout(saveTimeout.current); };
   }, [carrito, user]);
 
-  // filtrado por categoria: ahora categoriaSeleccionada guarda id (number) o null
   const productosFiltrados = categoriaSeleccionada
     ? productos.filter((p) => Number(p.categoria_id) === Number(categoriaSeleccionada))
     : productos;
@@ -192,14 +195,6 @@ export default function Home() {
     });
   };
 
-  const quitarDelCarrito = (nombre) => {
-    if (!user) {
-      setShowLoginModal(true);
-      return;
-    }
-    setCarrito((prev) => prev.filter((item) => item.nombre !== nombre));
-  };
-
   const cambiarCantidad = (nombre, delta) => {
     if (!user) {
       setShowLoginModal(true);
@@ -246,55 +241,35 @@ export default function Home() {
     }
   };
 
+  // nuevo: abrir modal detalle
+  const openProductDetail = (prod) => {
+    setSelectedProduct(prod);
+    setShowProductModal(true);
+  };
+  const closeProductDetail = () => {
+    setSelectedProduct(null);
+    setShowProductModal(false);
+  };
+
   return (
-    <Container
-      fluid
-      className="min-vh-100 py-4 px-2"
-      style={{
-        background: "#e0f7fa",
-        border: "2px solid #0097a7",
-        borderRadius: "24px",
-        boxShadow: "0 0 24px #0097a755",
-        color: "#01579b",
-        fontFamily: "Fira Mono, monospace",
-      }}
-    >
+    <Container fluid className="min-vh-100 py-4 px-2 futuristic-container">
       <Row className="align-items-center mb-4">
         <Col xs="auto" className="d-flex align-items-center">
           <Dropdown>
-            <Dropdown.Toggle variant="outline-info" style={{ border: "none" }}>
-              <FaBars size={30} />
-              <span className="ms-2 small text-info" style={{ letterSpacing: 1 }}>
-                Categorías
-              </span>
+            <Dropdown.Toggle variant="outline-info" className="transparent-toggle">
+              <FaBars size={26} />
+              <span className="ms-2 small text-info categories-label">Categorías</span>
             </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Item
-                key="todas"
-                onClick={() => handleCategoria(null)}
-                active={categoriaSeleccionada === null}
-              >
-                Todas
-              </Dropdown.Item>
+            <Dropdown.Menu className="futuristic-dropdown">
+              <Dropdown.Item key="todas" onClick={() => handleCategoria(null)} active={categoriaSeleccionada === null}>Todas</Dropdown.Item>
               <Dropdown.Divider />
               {categorias.length === 0 ? (
-                // fallback: mostrar algunas categorias hardcode si no hay backend
                 ["Cañas", "Reels", "Señuelos", "Kits"].map((cat) => (
-                  <Dropdown.Item
-                    key={cat}
-                    onClick={() => handleCategoria(cat)}
-                    active={categoriaSeleccionada === cat}
-                  >
-                    {cat}
-                  </Dropdown.Item>
+                  <Dropdown.Item key={cat} onClick={() => handleCategoria(cat)} active={categoriaSeleccionada === cat}>{cat}</Dropdown.Item>
                 ))
               ) : (
                 categorias.map((cat) => (
-                  <Dropdown.Item
-                    key={cat.id}
-                    onClick={() => handleCategoria(cat.id)}
-                    active={categoriaSeleccionada === cat.id}
-                  >
+                  <Dropdown.Item key={cat.id} onClick={() => handleCategoria(cat.id)} active={categoriaSeleccionada === cat.id}>
                     {cat.nombre ?? cat.name}
                   </Dropdown.Item>
                 ))
@@ -302,88 +277,30 @@ export default function Home() {
             </Dropdown.Menu>
           </Dropdown>
         </Col>
+
         <Col className="text-center">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img
-              src={logo}
-              alt="Logo"
-              style={{
-                height: "54px",
-                marginRight: "16px",
-                filter: "drop-shadow(0 2px 6px #0097a7aa)",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "'Montserrat', 'Fira Mono', monospace",
-                fontWeight: 900,
-                fontSize: "2.8rem",
-                color: "#ff3d00",
-                letterSpacing: 2,
-                textShadow: "0 2px 8px #fff, 0 1px 0 #0097a7, 0 0 12px #ffccbc",
-              }}
-            >
-              Pescasr
-            </span>
+          <div className="brand-row">
+            <img src={logo} alt="Logo" className="brand-logo" />
+            <span className="brand-title">Pescasr</span>
           </div>
         </Col>
+
         <Col xs="auto" className="d-flex align-items-center justify-content-end">
-          <Stack direction="horizontal" gap={2}>
+          <Stack direction="horizontal" gap={2} className="header-controls">
             {!user ? (
               <>
-                <Button
-                  variant="outline-info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#0097a7", border: "2px solid #0097a7" }}
-                  onClick={() => navigate("/login")}
-                >
-                  Iniciar sesion
-                </Button>
-                <Button
-                  variant="info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#fff", background: "#0097a7", border: "none" }}
-                  onClick={() => navigate("/register")}
-                >
-                  Registrarse
-                </Button>
+                <Button variant="outline-info" className="glass-btn" onClick={() => navigate("/login")}>Iniciar sesión</Button>
+                <Button variant="info" className="solid-btn" onClick={() => navigate("/register")}>Registrarse</Button>
               </>
             ) : (
               <>
-                <span style={{ fontWeight: "bold", color: "#0097a7" }}>
-                  ¡Hola, {user.username}!
-                </span>
+                <span className="greeting">¡Hola, {user.username}!</span>
                 <Logout />
               </>
             )}
-            <Button
-              variant="outline-info"
-              style={{ border: "none", position: "relative" }}
-              onClick={() => {
-                if (!user) setShowLoginModal(true);
-                else setMostrarCarrito(true);
-              }}
-              disabled={!user}
-            >
-              <FaShoppingCart size={30} />
-              {carrito.length > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    background: "#ff3d00",
-                    color: "#fff",
-                    borderRadius: "50%",
-                    fontSize: "0.8rem",
-                    width: 20,
-                    height: 20,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
-                </span>
-              )}
+            <Button variant="outline-info" className="floating-cart-btn" onClick={() => { if (!user) setShowLoginModal(true); else setMostrarCarrito(true); }} disabled={!user}>
+              <FaShoppingCart size={20} />
+              {carrito.length > 0 && (<span className="cart-count-badge">{carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}</span>)}
             </Button>
           </Stack>
         </Col>
@@ -391,29 +308,14 @@ export default function Home() {
 
       <Row className="justify-content-center mb-5 position-relative">
         <Col md={8}>
-          <InputGroup>
-            <InputGroup.Text className="bg-info text-dark border-0">
-              <FaSearch />
-            </InputGroup.Text>
-            <Form.Control
-              placeholder="Buscar productos..."
-              className="bg-dark text-info border-0"
-              style={{ fontSize: "1.2rem", letterSpacing: 1 }}
-              value={busqueda}
-              onChange={handleBusqueda}
-              autoComplete="off"
-            />
+          <InputGroup className="search-group">
+            <InputGroup.Text className="bg-search"><FaSearch /></InputGroup.Text>
+            <Form.Control placeholder="Buscar productos..." className="search-input" value={busqueda} onChange={handleBusqueda} autoComplete="off" />
           </InputGroup>
           {sugerencias.length > 0 && (
-            <ListGroup className="position-absolute w-100 z-3">
+            <ListGroup className="position-absolute w-100 suggestions-list">
               {sugerencias.map((prod) => (
-                <ListGroup.Item
-                  key={prod.nombre}
-                  action
-                  onClick={() => handleSugerenciaClick(prod.nombre)}
-                >
-                  {prod.nombre}
-                </ListGroup.Item>
+                <ListGroup.Item key={prod.nombre} action onClick={() => handleSugerenciaClick(prod.nombre)}>{prod.nombre}</ListGroup.Item>
               ))}
             </ListGroup>
           )}
@@ -422,50 +324,22 @@ export default function Home() {
 
       <Row className="justify-content-center">
         {cargando ? (
-          <Col>
-            <p>Cargando productos...</p>
-          </Col>
+          <Col><p>Cargando productos...</p></Col>
         ) : productosAMostrar.length === 0 ? (
-          <Col>
-            <p>No se encontraron productos.</p>
-          </Col>
+          <Col><p>No se encontraron productos.</p></Col>
         ) : (
           productosAMostrar.map((prod, idx) => (
             <Col key={idx} xs={12} sm={6} md={3} className="mb-4 d-flex justify-content-center">
-              <Card
-                bg="dark"
-                text="info"
-                style={{
-                  width: "15rem",
-                  borderRadius: "28px",
-                  border: "2px solid #b3e0ff",
-                  background: "rgba(35,37,38,0.95)",
-                  color: "#b3e0ff",
-                  boxShadow: "0 2px 12px #b3e0ff22",
-                  padding: 0,
-                  transition: "transform 0.1s",
-                }}
-                className="text-center p-0 product-btn"
-              >
-                <Card.Body>
-                  <Card.Title style={{ fontSize: "1.6rem", fontWeight: "bold", letterSpacing: 1 }}>
-                    {prod.nombre}
-                  </Card.Title>
-                  <Card.Text style={{ fontSize: "1.1rem", color: "#e3f6ff" }}>{prod.descripcion}</Card.Text>
-                  <Card.Text>
-                    <span className="badge bg-info">{prod.categoria}</span>
-                  </Card.Text>
-                  <Button
-                    variant="success"
-                    style={{ borderRadius: "12px", fontWeight: "bold" }}
-                    onClick={() => {
-                      if (!user) setShowLoginModal(true);
-                      else agregarAlCarrito(prod);
-                    }}
-                    disabled={!user}
-                  >
-                    Comprar
-                  </Button>
+              <Card className="futuristic-card text-center">
+                <Card.Body onClick={() => openProductDetail(prod)} style={{ cursor: "pointer" }}>
+                  <Card.Title className="product-title">{prod.nombre}</Card.Title>
+                  <Card.Text className="product-desc">{prod.descripcion ? prod.descripcion.substring(0,80) + (prod.descripcion.length>80?"...":"") : ""}</Card.Text>
+                  <div className="product-price">Precio: ${Number(prod.precio || 0).toFixed(2)}</div>
+                  <div style={{ height: 12 }}></div>
+                  <div className="category-badge">{prod.categoria}</div>
+                  <div style={{ marginTop: 10 }}>
+                    <Button variant="success" className="buy-btn" onClick={(e) => { e.stopPropagation(); if (!user) setShowLoginModal(true); else agregarAlCarrito(prod); }} disabled={!user}>Comprar</Button>
+                  </div>
                 </Card.Body>
               </Card>
             </Col>
@@ -473,127 +347,55 @@ export default function Home() {
         )}
       </Row>
 
-      <Modal
-        show={mostrarCarrito}
-        onHide={() => setMostrarCarrito(false)}
-        centered
-        size="lg"
-        contentClassName="border-0"
-        style={{ fontFamily: "Fira Mono, monospace" }}
-      >
-        <Modal.Header
-          closeButton
-          style={{
-            background: "#e0f7fa",
-            borderBottom: "2px solid #0097a7",
-            color: "#01579b",
-          }}
-        >
-          <Modal.Title>
-            <FaShoppingCart className="me-2" />
-            Carrito de compras
-          </Modal.Title>
+      {/* Product detail modal */}
+      <Modal show={showProductModal} onHide={closeProductDetail} centered contentClassName="futuristic-modal">
+        <Modal.Header closeButton>
+          <Modal.Title>{selectedProduct?.nombre}</Modal.Title>
         </Modal.Header>
-        <Modal.Body
-          style={{
-            background: "#e0f7fa",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
-          }}
-        >
-          {carrito.length === 0 ? (
-            <p>El carrito está vacío.</p>
-          ) : (
-            <ListGroup variant="flush">
+        <Modal.Body>
+          <p style={{ fontWeight: 700, color: "#00e5ff" }}>Precio: ${selectedProduct ? Number(selectedProduct.precio).toFixed(2) : "0.00"}</p>
+          <p>{selectedProduct?.descripcion || "Sin descripción"}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-info" onClick={closeProductDetail}>Cerrar</Button>
+          <Button variant="success" onClick={() => { if (!user) { setShowLoginModal(true); } else { agregarAlCarrito(selectedProduct); closeProductDetail(); } }}>Agregar al carrito</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Carrito modal */}
+      <Modal show={mostrarCarrito} onHide={() => setMostrarCarrito(false)} centered size="lg" contentClassName="futuristic-modal">
+        <Modal.Header closeButton><Modal.Title>Carrito</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {carrito.length === 0 ? <p>El carrito está vacío.</p> : (
+            <ListGroup>
               {carrito.map((item) => (
-                <ListGroup.Item
-                  key={item.nombre}
-                  style={{
-                    background: "#e0f7fa",
-                    border: "none",
-                    borderBottom: "1px solid #b3e0ff",
-                  }}
-                  className="d-flex align-items-center justify-content-between"
-                >
+                <ListGroup.Item key={item.nombre} className="d-flex justify-content-between align-items-center cart-item">
                   <div>
-                    <span style={{ fontWeight: "bold" }}>{item.nombre}</span>
-                    <span className="badge bg-info ms-2">{item.categoria}</span>
-                    <div style={{ fontSize: "0.95rem", color: "#0097a7" }}>
-                      ${Number(item.precio).toLocaleString("es-AR")}
-                    </div>
+                    <strong>{item.nombre}</strong>
+                    <div className="text-muted">{item.categoria}</div>
                   </div>
                   <div className="d-flex align-items-center">
-                    <Button
-                      variant="outline-info"
-                      size="sm"
-                      className="me-2"
-                      onClick={() => cambiarCantidad(item.nombre, -1)}
-                      disabled={!user || item.cantidad === 1}
-                    >
-                      <FaMinus />
-                    </Button>
-                    <span style={{ minWidth: 32, textAlign: "center" }}>{item.cantidad}</span>
-                    <Button
-                      variant="outline-info"
-                      size="sm"
-                      className="ms-2"
-                      onClick={() => cambiarCantidad(item.nombre, 1)}
-                      disabled={!user}
-                    >
-                      <FaPlus />
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      className="ms-3"
-                      onClick={() => quitarDelCarrito(item.nombre)}
-                      disabled={!user}
-                    >
-                      <FaTrashAlt />
-                    </Button>
+                    <Button size="sm" variant="outline-secondary" onClick={() => cambiarCantidad(item.nombre, -1)}>-</Button>
+                    <span className="mx-2">{item.cantidad}</span>
+                    <Button size="sm" variant="outline-secondary" onClick={() => cambiarCantidad(item.nombre, 1)}>+</Button>
                   </div>
                 </ListGroup.Item>
               ))}
             </ListGroup>
           )}
         </Modal.Body>
-        <Modal.Footer
-          style={{
-            background: "#e0f7fa",
-            borderTop: "2px solid #0097a7",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>
-            Total: ${totalCarrito.toLocaleString("es-AR")}
-          </div>
-          <Button
-            variant="success"
-            style={{ borderRadius: "12px", fontWeight: "bold" }}
-            disabled={carrito.length === 0 || !user}
-            onClick={handleFinalizarCompra}
-          >
-            Finalizar compra
-          </Button>
+        <Modal.Footer>
+          <div style={{ marginRight: "auto", fontWeight: "bold" }}>Total: ${totalCarrito.toFixed(2)}</div>
+          <Button variant="success" onClick={handleFinalizarCompra} disabled={carrito.length === 0}>Finalizar</Button>
         </Modal.Footer>
       </Modal>
 
       <Modal show={showLoginModal} onHide={() => setShowLoginModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Iniciar sesión requerido</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>Debes iniciar sesión para usar el carrito. ¿Querés iniciar sesión o registrarte?</p>
-        </Modal.Body>
+        <Modal.Header closeButton><Modal.Title>Iniciar sesión requerido</Modal.Title></Modal.Header>
+        <Modal.Body>Debes iniciar sesión para usar el carrito.</Modal.Body>
         <Modal.Footer>
-          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>
-            Registrarse
-          </Button>
-          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>
-            Iniciar sesión
-          </Button>
+          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>Registrarse</Button>
+          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>Iniciar sesión</Button>
         </Modal.Footer>
       </Modal>
     </Container>
