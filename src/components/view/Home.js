@@ -9,6 +9,7 @@ import Logout from "./Logout";
 import logo from "../../img/logo.png";
 import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
 
+
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -137,6 +138,7 @@ export default function Home() {
     ? productos.filter((p) => Number(p.categoria_id) === Number(categoriaSeleccionada))
     : productos;
 
+
   const handleBusqueda = (e) => {
     const valor = e.target.value;
     setBusqueda(valor);
@@ -150,6 +152,7 @@ export default function Home() {
     }
   };
 
+
   const handleSugerenciaClick = (nombre) => {
     setBusqueda(nombre);
     setSugerencias([]);
@@ -158,9 +161,11 @@ export default function Home() {
 
   const handleCategoria = (catId) => {
     setCategoriaSeleccionada(catId);
+
     setBusqueda("");
     setSugerencias([]);
   };
+
 
   const productosAMostrar =
     busqueda.length > 0
@@ -188,6 +193,7 @@ export default function Home() {
           cantidad: 1,
           producto_id: producto.id ?? producto.producto_id ?? null
         }];
+
       }
     });
   };
@@ -197,6 +203,7 @@ export default function Home() {
       setShowLoginModal(true);
       return;
     }
+
     setCarrito((prev) => prev.filter((item) => item.nombre !== nombre));
   };
 
@@ -205,11 +212,13 @@ export default function Home() {
       setShowLoginModal(true);
       return;
     }
+
     setCarrito((prev) =>
       prev
         .map((item) =>
           item.nombre === nombre
             ? { ...item, cantidad: Math.max(1, (item.cantidad || 0) + delta) }
+
             : item
         )
         .filter((item) => item.cantidad > 0)
@@ -246,6 +255,7 @@ export default function Home() {
     }
   };
 
+
   return (
     <Container
       fluid
@@ -259,6 +269,7 @@ export default function Home() {
         fontFamily: "Fira Mono, monospace",
       }}
     >
+
       <Row className="align-items-center mb-4">
         <Col xs="auto" className="d-flex align-items-center">
           <Dropdown>
@@ -299,6 +310,7 @@ export default function Home() {
                   </Dropdown.Item>
                 ))
               )}
+
             </Dropdown.Menu>
           </Dropdown>
         </Col>
@@ -337,6 +349,7 @@ export default function Home() {
                   onClick={() => navigate("/login")}
                 >
                   Iniciar sesion
+
                 </Button>
                 <Button
                   variant="info"
@@ -344,6 +357,7 @@ export default function Home() {
                   onClick={() => navigate("/register")}
                 >
                   Registrarse
+
                 </Button>
               </>
             ) : (
@@ -362,6 +376,7 @@ export default function Home() {
                 else setMostrarCarrito(true);
               }}
               disabled={!user}
+
             >
               <FaShoppingCart size={30} />
               {carrito.length > 0 && (
@@ -382,12 +397,14 @@ export default function Home() {
                   }}
                 >
                   {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
+
                 </span>
               )}
             </Button>
           </Stack>
         </Col>
       </Row>
+
 
       <Row className="justify-content-center mb-5 position-relative">
         <Col md={8}>
@@ -426,6 +443,7 @@ export default function Home() {
             <p>Cargando productos...</p>
           </Col>
         ) : productosAMostrar.length === 0 ? (
+
           <Col>
             <p>No se encontraron productos.</p>
           </Col>
@@ -463,6 +481,7 @@ export default function Home() {
                       else agregarAlCarrito(prod);
                     }}
                     disabled={!user}
+
                   >
                     Comprar
                   </Button>
@@ -472,6 +491,7 @@ export default function Home() {
           ))
         )}
       </Row>
+
 
       <Modal
         show={mostrarCarrito}
@@ -520,6 +540,7 @@ export default function Home() {
                     <span className="badge bg-info ms-2">{item.categoria}</span>
                     <div style={{ fontSize: "0.95rem", color: "#0097a7" }}>
                       ${Number(item.precio).toLocaleString("es-AR")}
+
                     </div>
                   </div>
                   <div className="d-flex align-items-center">
@@ -529,6 +550,7 @@ export default function Home() {
                       className="me-2"
                       onClick={() => cambiarCantidad(item.nombre, -1)}
                       disabled={!user || item.cantidad === 1}
+
                     >
                       <FaMinus />
                     </Button>
@@ -539,6 +561,7 @@ export default function Home() {
                       className="ms-2"
                       onClick={() => cambiarCantidad(item.nombre, 1)}
                       disabled={!user}
+
                     >
                       <FaPlus />
                     </Button>
@@ -548,6 +571,7 @@ export default function Home() {
                       className="ms-3"
                       onClick={() => quitarDelCarrito(item.nombre)}
                       disabled={!user}
+
                     >
                       <FaTrashAlt />
                     </Button>
@@ -574,6 +598,7 @@ export default function Home() {
             style={{ borderRadius: "12px", fontWeight: "bold" }}
             disabled={carrito.length === 0 || !user}
             onClick={handleFinalizarCompra}
+
           >
             Finalizar compra
           </Button>
@@ -596,6 +621,7 @@ export default function Home() {
           </Button>
         </Modal.Footer>
       </Modal>
+
     </Container>
   );
 }

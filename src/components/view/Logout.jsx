@@ -3,6 +3,7 @@ import { Button } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 
+
 export default function Logout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export default function Logout() {
   const handleLogout = () => {
     logout();
     navigate("/");
+
   };
 
   return (
@@ -20,6 +22,7 @@ export default function Logout() {
         borderRadius: "12px",
         color: "#0097a7",
         border: "2px solid #0097a7",
+
       }}
       onClick={handleLogout}
     >
