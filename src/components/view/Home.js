@@ -1,27 +1,18 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
-  Container, Row, Col, Button, Form, InputGroup, Card, Stack, Dropdown, ListGroup, Modal
+  Container, Row, Col, Button, Form, InputGroup, Card, Dropdown, ListGroup, Modal
 } from "react-bootstrap";
 import { FaBars, FaShoppingCart, FaSearch, FaTrashAlt, FaPlus, FaMinus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../AuthContext"; // 
+import { useAuth } from "../../AuthContext";
 import Logout from "./Logout";
-import logo from "../../img/logo.png"; // 
+import logo from "../../img/logo.png";
+import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
+import "./Home.css";
 
-const productos = [
-  { nombre: "Caña Pro", descripcion: "Caña de pescar profesional - $25.000", categoria: "Cañas", precio: 25000 },
-  { nombre: "Caña Básica", descripcion: "Caña para principiantes - $10.000", categoria: "Cañas", precio: 10000 },
-  { nombre: "Reel Ultra", descripcion: "Reel metálico - $18.000", categoria: "Reels", precio: 18000 },
-  { nombre: "Reel Compacto", descripcion: "Reel compacto - $12.000", categoria: "Reels", precio: 12000 },
-  { nombre: "Señuelo X", descripcion: "Señuelo flotante - $3.500", categoria: "Señuelos", precio: 3500 },
-  { nombre: "Señuelo Y", descripcion: "Señuelo hundido - $4.000", categoria: "Señuelos", precio: 4000 },
-  { nombre: "Kit Básico", descripcion: "Kit inicial - $9.000", categoria: "Kits", precio: 9000 },
-  { nombre: "Kit Pro", descripcion: "Kit profesional - $20.000", categoria: "Kits", precio: 20000 },
-];
-
-const categorias = ["Cañas", "Reels", "Señuelos", "Kits"];
 
 export default function Home() {
+
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -30,13 +21,127 @@ export default function Home() {
   const [sugerencias, setSugerencias] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
+  const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Filtrar productos por categoría
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showProductModal, setShowProductModal] = useState(false);
+
+  const saveTimeout = useRef(null);
+  const prevServerCartCountRef = useRef(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchAll = async () => {
+      setCargando(true);
+      try {
+        const [dataProducts, dataCats] = await Promise.all([getProducts(), getCategories()]);
+        const cats = Array.isArray(dataCats) ? dataCats : [];
+        if (!mounted) return;
+
+        setCategorias(cats);
+
+        const mapped = (Array.isArray(dataProducts) ? dataProducts : []).map((p) => {
+          const categoriaObj = p.categoria && typeof p.categoria === "object" ? p.categoria : null;
+          const categoriaNombre = categoriaObj ? (categoriaObj.nombre || categoriaObj.name) : (p.categoria || p.category || p.categoria_producto || "Otros");
+          const categoria_id = categoriaObj ? categoriaObj.id : (p.categoria_id ?? null);
+          return {
+            id: p.id ?? p.pk ?? null,
+            nombre: p.nombre || p.name || p.title || p.titulo || p.producto || "",
+            descripcion: p.descripcion || p.description || p.desc || p.detail || "",
+            categoria: categoriaNombre,
+            categoria_id: categoria_id,
+            precio: Number(p.precio ?? p.price ?? p.valor ?? 0) || 0,
+            stock: p.stock ?? p.cantidad ?? 0,
+          };
+        });
+
+        setProductos(mapped);
+      } catch (err) {
+        console.error("Error cargando productos/categorias:", err);
+        setProductos([]); setCategorias([]);
+      } finally {
+        if (mounted) setCargando(false);
+      }
+    };
+    fetchAll();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (user) {
+        const serverCart = JSON.parse(localStorage.getItem("cart_server") || "[]");
+        prevServerCartCountRef.current = Array.isArray(serverCart) ? serverCart.length : 0;
+        if (Array.isArray(serverCart) && serverCart.length > 0) {
+          const mapped = serverCart.map((it) => ({
+            nombre: it.producto?.nombre || it.producto?.name || "",
+            descripcion: it.producto?.descripcion || it.producto?.description || "",
+            categoria: it.producto?.categoria && typeof it.producto.categoria === "object" ? (it.producto.categoria.nombre || it.producto.categoria.name) : (it.producto?.categoria || "Otros"),
+            precio: Number(it.producto?.precio ?? it.producto?.price ?? 0) || 0,
+            cantidad: it.cantidad || 1,
+            producto_id: it.producto?.id || null,
+            id: it.producto?.id || null,
+          }));
+          setCarrito(mapped);
+          return;
+        }
+      }
+      const local = JSON.parse(localStorage.getItem("cart_local") || "[]");
+      setCarrito(Array.isArray(local) ? local : []);
+    } catch (e) {
+      setCarrito([]);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    try { localStorage.setItem("cart_local", JSON.stringify(carrito || [])); } catch (e) {}
+    if (!user) return;
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(async () => {
+      try {
+        const itemsWithIds = (carrito || []).map((c) => ({
+          producto_id: c.producto_id || c.id || null,
+          cantidad: c.cantidad || 1,
+        })).filter(i => i.producto_id);
+
+        if (itemsWithIds.length > 0) {
+          const res = await saveCart(itemsWithIds);
+          const serverItems = res && res.items ? res.items : null;
+          if (serverItems) {
+            localStorage.setItem("cart_server", JSON.stringify(serverItems));
+            prevServerCartCountRef.current = serverItems.length;
+          } else {
+            const serverCache = itemsWithIds.map(i => {
+              const p = carrito.find(c => (c.producto_id || c.id) === i.producto_id) || {};
+              return { producto: { id: i.producto_id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, categoria: p.categoria }, cantidad: i.cantidad, total: String((Number(p.precio) || 0) * i.cantidad) };
+            });
+            localStorage.setItem("cart_server", JSON.stringify(serverCache));
+            prevServerCartCountRef.current = serverCache.length;
+          }
+          return;
+        }
+
+        if ((carrito || []).length === 0 && prevServerCartCountRef.current > 0) {
+          await saveCart([]);
+          localStorage.setItem("cart_server", JSON.stringify([]));
+          prevServerCartCountRef.current = 0;
+        }
+      } catch (e) {
+        console.error("Error sincronizando carrito con servidor:", e);
+      }
+    }, 700);
+
+    return () => { if (saveTimeout.current) clearTimeout(saveTimeout.current); };
+  }, [carrito, user]);
+
   const productosFiltrados = categoriaSeleccionada
-    ? productos.filter((p) => p.categoria === categoriaSeleccionada)
+    ? productos.filter((p) => Number(p.categoria_id) === Number(categoriaSeleccionada))
     : productos;
 
-  // Filtrar sugerencias de búsqueda
+
   const handleBusqueda = (e) => {
     const valor = e.target.value;
     setBusqueda(valor);
@@ -50,21 +155,21 @@ export default function Home() {
     }
   };
 
-  // Al hacer click en sugerencia
+
   const handleSugerenciaClick = (nombre) => {
     setBusqueda(nombre);
     setSugerencias([]);
     setCategoriaSeleccionada(null);
   };
 
-  // Al seleccionar categoría
-  const handleCategoria = (cat) => {
-    setCategoriaSeleccionada(cat);
+  const handleCategoria = (catId) => {
+    setCategoriaSeleccionada(catId);
+
     setBusqueda("");
     setSugerencias([]);
   };
 
-  // Productos a mostrar (por búsqueda o por categoría)
+
   const productosAMostrar =
     busqueda.length > 0
       ? productos.filter((p) =>
@@ -72,32 +177,51 @@ export default function Home() {
         )
       : productosFiltrados;
 
-  // Carrito
   const agregarAlCarrito = (producto) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     setCarrito((prev) => {
-      const existe = prev.find((item) => item.nombre === producto.nombre);
+      const existe = prev.find((item) => (item.producto_id ?? item.id) === (producto.producto_id ?? producto.id));
       if (existe) {
         return prev.map((item) =>
-          item.nombre === producto.nombre
-            ? { ...item, cantidad: item.cantidad + 1 }
+          (item.producto_id ?? item.id) === (producto.producto_id ?? producto.id)
+            ? { ...item, cantidad: (item.cantidad || 0) + 1 }
             : item
         );
       } else {
-        return [...prev, { ...producto, cantidad: 1 }];
+        return [...prev, {
+          ...producto,
+          cantidad: 1,
+          producto_id: producto.id ?? producto.producto_id ?? null
+        }];
+
       }
     });
   };
 
   const quitarDelCarrito = (nombre) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
     setCarrito((prev) => prev.filter((item) => item.nombre !== nombre));
   };
 
   const cambiarCantidad = (nombre, delta) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
     setCarrito((prev) =>
       prev
         .map((item) =>
           item.nombre === nombre
-            ? { ...item, cantidad: Math.max(1, item.cantidad + delta) }
+            ? { ...item, cantidad: Math.max(1, (item.cantidad || 0) + delta) }
+
             : item
         )
         .filter((item) => item.cantidad > 0)
@@ -105,156 +229,152 @@ export default function Home() {
   };
 
   const totalCarrito = carrito.reduce(
-    (acc, item) => acc + item.precio * item.cantidad,
+    (acc, item) => acc + (Number(item.precio) || 0) * (item.cantidad || 0),
     0
   );
 
+  const handleFinalizarCompra = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (carrito.length === 0) return;
+    try {
+      const order = {
+        items: carrito.map((c) => ({ producto_id: c.producto_id || c.id, cantidad: c.cantidad, precio: c.precio })),
+        total: totalCarrito,
+        user: user ? user.username : undefined,
+        date: new Date().toISOString(),
+      };
+      await createOrder(order);
+      setCarrito([]);
+      setMostrarCarrito(false);
+      alert("¡Gracias por tu compra!");
+      localStorage.setItem("cart_server", JSON.stringify([]));
+      localStorage.setItem("cart_local", JSON.stringify([]));
+      prevServerCartCountRef.current = 0;
+    } catch (err) {
+      alert("Error al procesar la compra: " + (err.message || "Intente nuevamente"));
+    }
+  };
+
+  // Fix: define handleCardClick to open product modal
+  const handleCardClick = (prod) => {
+    setSelectedProduct(prod);
+    setShowProductModal(true);
+  };
+
   return (
-    <Container
-      fluid
-      className="min-vh-100 py-4 px-2"
-      style={{
-        background: "#e0f7fa",
-        border: "2px solid #0097a7",
-        borderRadius: "24px",
-        boxShadow: "0 0 24px #0097a755",
-        color: "#01579b",
-        fontFamily: "Fira Mono, monospace",
-      }}
-    >
-      {/* Navbar superior */}
-      <Row className="align-items-center mb-4">
-        <Col xs="auto" className="d-flex align-items-center">
+    <Container fluid className="futuristic-root futuristic-container">
+ 
+      {/* Header: logo + categorias (izq), título (centro), acciones (derecha) */}
+      <Row className="align-items-center mb-4 futuristic-header">
+         <Col xs="auto" className="d-flex align-items-center gap-3">
           <Dropdown>
-            <Dropdown.Toggle variant="outline-info" style={{ border: "none" }}>
-              <FaBars size={30} />
-              <span className="ms-2 small text-info" style={{ letterSpacing: 1 }}>
-                Categorías
-              </span>
+            <Dropdown.Toggle variant="link" className="text-info p-0" style={{ textDecoration: "none" }}>
+              <FaBars size={22} />
             </Dropdown.Toggle>
             <Dropdown.Menu>
-              {categorias.map((cat) => (
-                <Dropdown.Item
-                  key={cat}
-                  onClick={() => handleCategoria(cat)}
-                  active={categoriaSeleccionada === cat}
-                >
-                  {cat}
-                </Dropdown.Item>
-              ))}
+              <Dropdown.Item onClick={() => handleCategoria(null)} active={categoriaSeleccionada === null}>Todas</Dropdown.Item>
               <Dropdown.Divider />
-              <Dropdown.Item onClick={() => setCategoriaSeleccionada(null)}>
-                Todas
-              </Dropdown.Item>
+              {categorias.length === 0 ? (
+                ["Cañas", "Reels", "Señuelos", "Kits"].map((cat) => (
+                  <Dropdown.Item
+                    key={cat}
+                    onClick={() => handleCategoria(cat)}
+                    active={categoriaSeleccionada === cat}
+                  >
+                    {cat}
+                  </Dropdown.Item>
+                ))
+              ) : (
+                categorias.map((cat) => (
+                  <Dropdown.Item
+                    key={cat.id}
+                    onClick={() => handleCategoria(cat.id)}
+                    active={categoriaSeleccionada === cat.id}
+                  >
+                    {cat.nombre ?? cat.name}
+                  </Dropdown.Item>
+                ))
+              )}
             </Dropdown.Menu>
           </Dropdown>
+
+          <img src={logo} alt="Logo" className="brand-logo" />
         </Col>
-        <Col className="text-center">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img
-              src={logo}
-              alt="Logo"
-              style={{
-                height: "54px",
-                marginRight: "16px",
-                filter: "drop-shadow(0 2px 6px #0097a7aa)",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "'Montserrat', 'Fira Mono', monospace",
-                fontWeight: 900,
-                fontSize: "2.8rem",
-                color: "#ff3d00",
-                letterSpacing: 2,
-                textShadow: "0 2px 8px #fff, 0 1px 0 #0097a7, 0 0 12px #ffccbc",
-              }}
-            >
-              Pescasr
-            </span>
-          </div>
+
+        <Col className="text-center d-none d-md-block">
+          <div className="brand-title">Pescasr</div>
         </Col>
-        <Col xs="auto" className="d-flex align-items-center justify-content-end">
-          <Stack direction="horizontal" gap={2}>
-            {!user ? (
-              <>
-                <Button
-                  variant="outline-info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#0097a7", border: "2px solid #0097a7" }}
-                  onClick={() => navigate("/login")}
-                >
-                  Login
-                </Button>
-                <Button
-                  variant="info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#fff", background: "#0097a7", border: "none" }}
-                  onClick={() => navigate("/register")}
-                >
-                  Registro
-                </Button>
-              </>
-            ) : (
-              <>
-                <span style={{ fontWeight: "bold", color: "#0097a7" }}>
-                  ¡Hola, {user.username}!
-                </span>
-                <Logout />
-              </>
+
+        <Col xs="auto" className="d-flex align-items-center justify-content-end" style={{ marginLeft: "auto", gap: 8 }}>
+          {/* Futuristic action buttons (moved to top-right) */}
+          {!user ? (
+            <>
+              <Button
+                variant="light"
+                onClick={() => navigate("/login")}
+                style={{ borderRadius: 12, padding: "8px 14px", fontWeight: 800, background: "linear-gradient(90deg,#bff8ff,#9a6bff)", color: "#021222", boxShadow: "0 8px 30px rgba(154,107,255,0.12)" }}
+              >
+                Iniciar sesión
+              </Button>
+              <Button
+                variant="outline-light"
+                onClick={() => navigate("/register")}
+                style={{ borderRadius: 12, padding: "8px 14px", fontWeight: 800, color: "#bff8ff", borderColor: "rgba(191,248,255,0.18)" }}
+              >
+                Registrarse
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="hello" style={{ fontWeight: 800, color: "var(--accent-a, #00e5ff)", marginRight: 8 }}>{user.username}</span>
+              <Logout />
+            </>
+          )}
+
+          <Button
+            variant="dark"
+            onClick={() => { if (!user) setShowLoginModal(true); else setMostrarCarrito(true); }}
+            style={{ marginLeft: 8, position: "relative", borderRadius: 12, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(191,248,255,0.06)" }}
+          >
+            <FaShoppingCart />
+            {carrito.length > 0 && (
+              <span style={{ position: "absolute", top: -6, right: -6, background: "#ff3d00", color: "#fff", borderRadius: "50%", fontSize: "0.75rem", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>
+                {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
+              </span>
             )}
-            <Button
-              variant="outline-info"
-              style={{ border: "none", position: "relative" }}
-              onClick={() => setMostrarCarrito(true)}
-            >
-              <FaShoppingCart size={30} />
-              {carrito.length > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    background: "#ff3d00",
-                    color: "#fff",
-                    borderRadius: "50%",
-                    fontSize: "0.8rem",
-                    width: 20,
-                    height: 20,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {carrito.reduce((acc, item) => acc + item.cantidad, 0)}
-                </span>
-              )}
-            </Button>
-          </Stack>
+          </Button>
         </Col>
       </Row>
 
-      {/* Buscador */}
+      {/* Search */}
       <Row className="justify-content-center mb-5 position-relative">
         <Col md={8}>
-          <InputGroup>
-            <InputGroup.Text className="bg-info text-dark border-0">
-              <FaSearch />
-            </InputGroup.Text>
-            <Form.Control
-              placeholder="Buscar productos..."
-              className="bg-dark text-info border-0"
-              style={{ fontSize: "1.2rem", letterSpacing: 1 }}
-              value={busqueda}
-              onChange={handleBusqueda}
-              autoComplete="off"
-            />
-          </InputGroup>
+          <div className="search-wrap">
+            <InputGroup className="search-group">
+              <InputGroup.Text className="bg-search">
+                <FaSearch />
+              </InputGroup.Text>
+              <Form.Control
+                placeholder="Buscar productos..."
+                className="search-input"
+                style={{ fontSize: "1.05rem", letterSpacing: 0.6 }}
+                value={busqueda}
+                onChange={handleBusqueda}
+                autoComplete="off"
+              />
+            </InputGroup>
+          </div>
           {sugerencias.length > 0 && (
-            <ListGroup className="position-absolute w-100 z-3">
+            <ListGroup className="position-absolute w-100 z-3" style={{ marginTop: 8, boxShadow: "0 12px 40px rgba(2,18,34,0.6)", background: "linear-gradient(180deg, rgba(2,18,34,0.95), rgba(6,24,36,0.95))" }}>
               {sugerencias.map((prod) => (
                 <ListGroup.Item
                   key={prod.nombre}
                   action
                   onClick={() => handleSugerenciaClick(prod.nombre)}
+                  style={{ background: "transparent", color: "#e6fbff" }}
                 >
                   {prod.nombre}
                 </ListGroup.Item>
@@ -264,56 +384,47 @@ export default function Home() {
         </Col>
       </Row>
 
-      {/* Productos */}
+      {/* Products grid - NO TOCAR (contenido intacto) */}
       <Row className="justify-content-center">
-        {productosAMostrar.length === 0 ? (
+        {cargando ? (
+          <Col>
+            <p>Cargando productos...</p>
+          </Col>
+        ) : productosAMostrar.length === 0 ? (
+
           <Col>
             <p>No se encontraron productos.</p>
           </Col>
         ) : (
           productosAMostrar.map((prod, idx) => (
+
             <Col key={idx} xs={12} sm={6} md={3} className="mb-4 d-flex justify-content-center">
-              <Card
-                bg="dark"
-                text="info"
-                style={{
-                  width: "15rem",
-                  borderRadius: "28px",
-                  border: "2px solid #b3e0ff",
-                  background: "rgba(35,37,38,0.95)",
-                  color: "#b3e0ff",
-                  boxShadow: "0 2px 12px #b3e0ff22",
-                  padding: 0,
-                  transition: "transform 0.1s",
-                }}
-                className="text-center p-0 product-btn"
-              >
+              <Card className="futuristic-card product-card" onClick={() => handleCardClick(prod)}>
                 <Card.Body>
-                  <Card.Title style={{ fontSize: "1.6rem", fontWeight: "bold", letterSpacing: 1 }}>
-                    {prod.nombre}
-                  </Card.Title>
-                  <Card.Text style={{ fontSize: "1.1rem", color: "#e3f6ff" }}>{prod.descripcion}</Card.Text>
-                  <Card.Text>
-                    <span className="badge bg-info">{prod.categoria}</span>
-                  </Card.Text>
+                  <Card.Title className="product-title">{prod.nombre}</Card.Title>
+                  <Card.Text className="product-desc">{prod.descripcion ? (prod.descripcion.length > 120 ? prod.descripcion.slice(0, 120) + "..." : prod.descripcion) : "Sin descripción"}</Card.Text>
+                  <div className="meta-row">
+                    <span className="category-badge">{prod.categoria}</span>
+                    <span className="product-price">${Number(prod.precio).toLocaleString("es-AR")}</span>
+                  </div>
                   <Button
                     variant="success"
-                    style={{ borderRadius: "12px", fontWeight: "bold" }}
-                    onClick={() => agregarAlCarrito(prod)}
+                    className="buy-btn"
+                    onClick={(e) => { e.stopPropagation(); if (!user) setShowLoginModal(true); else agregarAlCarrito(prod); }}
+                    disabled={!user}
                   >
                     Comprar
                   </Button>
                 </Card.Body>
               </Card>
             </Col>
-          ))
-        )}
+          )))}
       </Row>
 
-      {/* Modal Carrito */}
+      {/* Product details modal */}
       <Modal
-        show={mostrarCarrito}
-        onHide={() => setMostrarCarrito(false)}
+        show={showProductModal}
+        onHide={() => setShowProductModal(false)}
         centered
         size="lg"
         contentClassName="border-0"
@@ -322,42 +433,46 @@ export default function Home() {
         <Modal.Header
           closeButton
           style={{
-            background: "#e0f7fa",
-            borderBottom: "2px solid #0097a7",
-            color: "#01579b",
+            background: "linear-gradient(90deg, rgba(0,229,255,0.04), rgba(138,92,255,0.03))",
+            borderBottom: "1px solid rgba(191,248,255,0.06)",
+            color: "#e6fbff",
           }}
         >
           <Modal.Title>
-            <FaShoppingCart className="me-2" />
-            Carrito de compras
+            {selectedProduct?.nombre || "Detalle del producto"}
           </Modal.Title>
+
         </Modal.Header>
-        <Modal.Body
-          style={{
-            background: "#e0f7fa",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
-          }}
-        >
-          {carrito.length === 0 ? (
-            <p>El carrito está vacío.</p>
-          ) : (
+        <Modal.Body style={{ background: "linear-gradient(180deg, rgba(2,18,34,0.95), rgba(6,24,36,0.95))", color: "#e6fbff" }}>
+          <p className="product-modal-desc" style={{ whiteSpace: "pre-wrap", color: "#bfefff" }}>{selectedProduct?.descripcion || "No hay descripción para este producto."}</p>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+            <div style={{ fontWeight: 800 }}>{selectedProduct ? `$ ${Number(selectedProduct.precio).toLocaleString("es-AR")}` : ""}</div>
+            <div style={{ color: "var(--muted)" }}>{selectedProduct ? selectedProduct.categoria : ""} • Stock: {selectedProduct?.stock ?? "N/A"}</div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer style={{ background: "transparent", borderTop: "none" }}>
+          <Button variant="secondary" onClick={() => setShowProductModal(false)}>Cerrar</Button>
+          <Button variant="success" onClick={() => { if (!user) { setShowProductModal(false); setShowLoginModal(true); } else { agregarAlCarrito(selectedProduct); setShowProductModal(false); } }}>
+            Agregar al carrito
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cart modal */}
+      <Modal show={mostrarCarrito} onHide={() => setMostrarCarrito(false)} centered size="lg" contentClassName="border-0 futuristic-modal">
+        <Modal.Header closeButton style={{ background: "transparent", borderBottom: "none" }}>
+          <Modal.Title><FaShoppingCart className="me-2" /> Carrito de compras</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {carrito.length === 0 ? <p>El carrito está vacío.</p> : (
             <ListGroup variant="flush">
               {carrito.map((item) => (
-                <ListGroup.Item
-                  key={item.nombre}
-                  style={{
-                    background: "#e0f7fa",
-                    border: "none",
-                    borderBottom: "1px solid #b3e0ff",
-                  }}
-                  className="d-flex align-items-center justify-content-between"
-                >
+                <ListGroup.Item key={item.nombre} className="cart-item">
                   <div>
                     <span style={{ fontWeight: "bold" }}>{item.nombre}</span>
                     <span className="badge bg-info ms-2">{item.categoria}</span>
-                    <div style={{ fontSize: "0.95rem", color: "#0097a7" }}>
-                      ${item.precio.toLocaleString("es-AR")}
+                    <div style={{ fontSize: "0.95rem", color: "#00e5ff" }}>
+                      ${Number(item.precio).toLocaleString("es-AR")}
                     </div>
                   </div>
                   <div className="d-flex align-items-center">
@@ -366,7 +481,7 @@ export default function Home() {
                       size="sm"
                       className="me-2"
                       onClick={() => cambiarCantidad(item.nombre, -1)}
-                      disabled={item.cantidad === 1}
+                      disabled={!user || item.cantidad === 1}
                     >
                       <FaMinus />
                     </Button>
@@ -376,6 +491,7 @@ export default function Home() {
                       size="sm"
                       className="ms-2"
                       onClick={() => cambiarCantidad(item.nombre, 1)}
+                      disabled={!user}
                     >
                       <FaPlus />
                     </Button>
@@ -384,6 +500,7 @@ export default function Home() {
                       size="sm"
                       className="ms-3"
                       onClick={() => quitarDelCarrito(item.nombre)}
+                      disabled={!user}
                     >
                       <FaTrashAlt />
                     </Button>
@@ -395,10 +512,9 @@ export default function Home() {
         </Modal.Body>
         <Modal.Footer
           style={{
-            background: "#e0f7fa",
-            borderTop: "2px solid #0097a7",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
+            background: "linear-gradient(90deg, rgba(0,229,255,0.02), rgba(138,92,255,0.02))",
+            borderTop: "1px solid rgba(191,248,255,0.04)",
+            color: "#e6fbff",
             justifyContent: "space-between",
           }}
         >
@@ -408,13 +524,24 @@ export default function Home() {
           <Button
             variant="success"
             style={{ borderRadius: "12px", fontWeight: "bold" }}
-            disabled={carrito.length === 0}
-            onClick={() => alert("¡Gracias por tu compra!")}
+            disabled={carrito.length === 0 || !user}
+            onClick={handleFinalizarCompra}
           >
             Finalizar compra
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {/* Login required modal */}
+      <Modal show={showLoginModal} onHide={() => setShowLoginModal(false)} centered>
+        <Modal.Header closeButton><Modal.Title>Iniciar sesión requerido</Modal.Title></Modal.Header>
+        <Modal.Body><p>Debes iniciar sesión para usar el carrito. ¿Querés iniciar sesión o registrarte?</p></Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>Registrarse</Button>
+          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>Iniciar sesión</Button>
+        </Modal.Footer>
+      </Modal>
+
     </Container>
   );
 }

@@ -1,7 +1,9 @@
 import React from "react";
-import { useAuth } from "../../AuthContext";
-import { useNavigate } from "react-router-dom";
 import { Button } from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../AuthContext";
+import "./Auth.css";
+
 
 export default function Logout() {
   const { logout } = useAuth();
@@ -9,7 +11,8 @@ export default function Logout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
+    navigate("/");
+
   };
 
   return (
@@ -20,11 +23,11 @@ export default function Logout() {
         borderRadius: "12px",
         color: "#0097a7",
         border: "2px solid #0097a7",
-        fontFamily: "Fira Mono, monospace",
-        background: "white",
+
       }}
       onClick={handleLogout}
     >
+
       Cerrar sesión
     </Button>
   );

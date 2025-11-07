@@ -1,39 +1,160 @@
-import React, { createContext, useState, useContext } from "react";
-
-// Usuarios hardcodeados de ejemplo
-const initialUsers = [
-  { username: "admin", password: "admin123" },
-  { username: "user", password: "user123" }
-];
+import React, { createContext, useState, useContext, useEffect } from "react";
+import { loginRequest, registerRequest, setTokens, clearAuthTokens, getCart, saveCart, getProfile } from "./services/api";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [users, setUsers] = useState(initialUsers);
   const [user, setUser] = useState(null);
 
-  // Login
-  const login = (username, password) => {
-    const found = users.find(
-      (u) => u.username === username && u.password === password
-    );
-    if (found) {
-      setUser(found);
-      return true;
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        setUser(JSON.parse(stored));
+      }
+    } catch (e) {}
+
+    (async () => {
+      try {
+        const profile = await getProfile();
+        if (profile) {
+          profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
+          setUser(profile);
+          localStorage.setItem("user", JSON.stringify(profile));
+        }
+      } catch (e) {
+        // no autenticado
+      }
+    })();
+  }, []);
+
+  async function mergeLocalIntoServerCart() {
+    try {
+      const serverCartRaw = await getCart().catch(() => []);
+      const serverCart = Array.isArray(serverCartRaw) ? serverCartRaw : [];
+      const localCart = JSON.parse(localStorage.getItem("cart_local") || "[]") || [];
+
+      const map = new Map();
+      (serverCart || []).forEach(it => {
+        const id = it.producto?.id;
+        if (id) map.set(id, (map.get(id) || 0) + (it.cantidad || 1));
+      });
+      (localCart || []).forEach(it => {
+        const id = it.producto_id || it.id || null;
+        if (id) map.set(id, (map.get(id) || 0) + (it.cantidad || 1));
+      });
+
+      const itemsToSend = Array.from(map.entries()).map(([producto_id, cantidad]) => ({ producto_id, cantidad }));
+
+      if (itemsToSend.length > 0) {
+        const res = await saveCart(itemsToSend);
+        const serverItems = res && res.items ? res.items : itemsToSend.map(i => ({ producto: { id: i.producto_id }, cantidad: i.cantidad }));
+        localStorage.setItem("cart_server", JSON.stringify(serverItems));
+        const leftover = (localCart || []).filter(it => !(it.producto_id || it.id));
+        localStorage.setItem("cart_local", JSON.stringify(leftover));
+      } else {
+        localStorage.setItem("cart_server", JSON.stringify(serverCart || []));
+      }
+    } catch (e) {
+      try { localStorage.setItem("cart_server", JSON.stringify([])); } catch (err) {}
     }
-    return false;
+  }
+
+  const login = async (username, password) => {
+    try {
+      const data = await loginRequest(username, password);
+
+      // DEBUG: ver qué devuelve exactamente la API
+      if (process.env.NODE_ENV !== "production") {
+        try { console.debug("[auth] login response:", data); } catch (e) {}
+      }
+
+      // extraer token desde varias estructuras posibles
+      const access =
+        (data && (data.access || data.token)) ||
+        (data && data.data && (data.data.access || data.data.token)) ||
+        (data && data.tokens && (data.tokens.access || data.tokens.access_token)) ||
+        null;
+      const refresh =
+        (data && data.refresh) ||
+        (data && data.tokens && (data.tokens.refresh || data.tokens.refresh_token)) ||
+        null;
+
+      if (access) {
+        setTokens({ access, refresh });
+      }
+
+      // intentar obtener perfil (funciona con token o cookie de sesión)
+      let profile = null;
+      try { profile = await getProfile(); } catch (e) { profile = null; }
+
+      const usr = profile
+        ? (() => {
+            profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
+            return profile;
+          })()
+        : { username, isAdmin: false };
+
+      localStorage.setItem("user", JSON.stringify(usr));
+      setUser(usr);
+
+      await mergeLocalIntoServerCart();
+      return { ok: true };
+    } catch (err) {
+      const message =
+        (err && err.body && (err.body.detail || JSON.stringify(err.body))) ||
+        err.message ||
+        "Error en login";
+      return { ok: false, message };
+    }
   };
 
-  // Logout
-  const logout = () => setUser(null);
+  const register = async (username, password, email) => {
+    try {
+      const data = await registerRequest(username, password, email);
+      const access =
+        (data && (data.access || data.token)) ||
+        (data && data.data && (data.data.access || data.data.token)) ||
+        (data && data.tokens && (data.tokens.access || data.tokens.access_token)) ||
+        null;
+      const refresh =
+        (data && data.refresh) ||
+        (data && data.tokens && (data.tokens.refresh || data.tokens.refresh_token)) ||
+        null;
 
-  // Register
-  const register = (username, password) => {
-    if (users.some((u) => u.username === username)) return false;
-    const newUser = { username, password };
-    setUsers([...users, newUser]);
-    setUser(newUser);
-    return true;
+      if (access) {
+        setTokens({ access, refresh });
+
+        let profile = null;
+        try { profile = await getProfile(); } catch (e) { /* ignore */ }
+
+        const usr = profile
+          ? (() => {
+              profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
+              return profile;
+            })()
+          : { username, isAdmin: false };
+
+        localStorage.setItem("user", JSON.stringify(usr));
+        setUser(usr);
+
+        await mergeLocalIntoServerCart();
+
+        return { ok: true };
+      }
+      return { ok: true };
+    } catch (err) {
+      const message =
+        (err && err.body && (err.body.detail || JSON.stringify(err.body))) ||
+        err.message ||
+        "Error en registro";
+      return { ok: false, message };
+    }
+  };
+
+  const logout = () => {
+    clearAuthTokens();
+    setUser(null);
   };
 
   return (
@@ -43,7 +164,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Hook para usar el contexto
 export function useAuth() {
   return useContext(AuthContext);
 }
