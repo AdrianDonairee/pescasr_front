@@ -7,25 +7,23 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // intentar recuperar user almacenado y refrescar perfil desde servidor (cookie o token)
     try {
       const stored = localStorage.getItem("user");
       if (stored) {
         setUser(JSON.parse(stored));
       }
-    } catch (e) { /* ignore parse errors */ }
+    } catch (e) {}
 
     (async () => {
       try {
         const profile = await getProfile();
         if (profile) {
-          // normalizar campo isAdmin
           profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
           setUser(profile);
           localStorage.setItem("user", JSON.stringify(profile));
         }
       } catch (e) {
-        // no autenticado o sesión inválida -> mantener null o stored user
+        // no autenticado
       }
     })();
   }, []);
@@ -65,14 +63,28 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     try {
       const data = await loginRequest(username, password);
-      // si el backend devuelve tokens, guardarlos
-      if (data && (data.access || data.token || data.refresh)) {
-        const access = data.access || data.token || null;
-        const refresh = data.refresh || null;
+
+      // DEBUG: ver qué devuelve exactamente la API
+      if (process.env.NODE_ENV !== "production") {
+        try { console.debug("[auth] login response:", data); } catch (e) {}
+      }
+
+      // extraer token desde varias estructuras posibles
+      const access =
+        (data && (data.access || data.token)) ||
+        (data && data.data && (data.data.access || data.data.token)) ||
+        (data && data.tokens && (data.tokens.access || data.tokens.access_token)) ||
+        null;
+      const refresh =
+        (data && data.refresh) ||
+        (data && data.tokens && (data.tokens.refresh || data.tokens.refresh_token)) ||
+        null;
+
+      if (access) {
         setTokens({ access, refresh });
       }
 
-      // pedir perfil actualizado (funciona con token o cookie de sesión)
+      // intentar obtener perfil (funciona con token o cookie de sesión)
       let profile = null;
       try { profile = await getProfile(); } catch (e) { profile = null; }
 
@@ -100,9 +112,17 @@ export function AuthProvider({ children }) {
   const register = async (username, password, email) => {
     try {
       const data = await registerRequest(username, password, email);
-      if (data && (data.access || data.token)) {
-        const access = data.access || data.token;
-        const refresh = data.refresh;
+      const access =
+        (data && (data.access || data.token)) ||
+        (data && data.data && (data.data.access || data.data.token)) ||
+        (data && data.tokens && (data.tokens.access || data.tokens.access_token)) ||
+        null;
+      const refresh =
+        (data && data.refresh) ||
+        (data && data.tokens && (data.tokens.refresh || data.tokens.refresh_token)) ||
+        null;
+
+      if (access) {
         setTokens({ access, refresh });
 
         let profile = null;

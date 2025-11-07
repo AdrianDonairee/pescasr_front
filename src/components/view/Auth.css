@@ -1,0 +1,80 @@
+.auth-root{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: linear-gradient(180deg, rgba(2,6,23,0.98), rgba(6,18,38,0.98));
+  padding: 24px;
+  font-family: "Inter", "Fira Mono", system-ui;
+}
+
+/* Card: blanco para contraste con fondo oscuro */
+.auth-card{
+  width:100%;
+  max-width:420px;
+  padding:2.2rem;
+  border-radius:20px;
+  background: #ffffff; /* tarjeta blanca */
+  border: 1px solid rgba(2,6,23,0.06);
+  box-shadow: 0 30px 80px rgba(2,6,23,0.6);
+  color: #021222; /* texto principal en negro/azulado */
+}
+
+/* Título en negro y legible */
+.auth-title{
+  text-align:center;
+  font-weight:900;
+  font-size:2rem;
+  margin-bottom:1rem;
+  color: #021222;
+}
+
+/* Formulario */
+.auth-form{ display:flex; flex-direction:column; gap:12px; }
+.auth-input{
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(2,6,23,0.06);
+  background: #ffffff;
+  color: #021222;
+  outline:none;
+  font-size:1rem;
+  box-shadow: inset 0 1px 0 rgba(2,6,23,0.02);
+}
+.auth-input::placeholder{ color: rgba(2,18,34,0.35); }
+
+/* Botón principal: conservar contraste pero texto oscuro */
+.auth-submit{
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(90deg,#00e5ff,#8a5cff);
+  border:none;
+  color:#021222; /* texto negro */
+  font-weight:800;
+}
+
+/* Botón secundario */
+.auth-back{ margin-top:10px; width:100%; border-radius:12px; color:#021222; border:1px solid rgba(2,6,23,0.06); background:transparent; }
+
+/* Footer / links */
+.auth-footer{ margin-top:12px; text-align:center; color: rgba(2,18,34,0.8); }
+.auth-footer a{ color: var(--accent-a, #00aee0); text-decoration: underline; }
+
+/* Mensajes de error */
+.auth-error{ color:#b00020; text-align:center; margin-top:6px; font-weight:700; }
+
+/* Logout button (cuando se usa en tarjetas o header) */
+.auth-logout-btn{
+  padding:8px 12px;
+  border-radius:12px;
+  border:2px solid rgba(2,6,23,0.06);
+  color:#021222;
+  background: transparent;
+  font-weight:800;
+}
+
+/* Responsive */
+@media (max-width: 480px){
+  .auth-card{ padding:1.2rem; margin:1rem; }
+  .auth-title{ font-size:1.5rem; }
+}

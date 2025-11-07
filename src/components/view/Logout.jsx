@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
+import "./Auth.css";
 
 
 export default function Logout() {
@@ -26,6 +27,7 @@ export default function Logout() {
       }}
       onClick={handleLogout}
     >
+
       Cerrar sesión
     </Button>
   );

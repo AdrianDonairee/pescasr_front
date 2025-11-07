@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
-  Container, Row, Col, Button, Form, InputGroup, Card, Stack, Dropdown, ListGroup, Modal
+  Container, Row, Col, Button, Form, InputGroup, Card, Dropdown, ListGroup, Modal
 } from "react-bootstrap";
 import { FaBars, FaShoppingCart, FaSearch, FaTrashAlt, FaPlus, FaMinus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -8,13 +8,15 @@ import { useAuth } from "../../AuthContext";
 import Logout from "./Logout";
 import logo from "../../img/logo.png";
 import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
+import "./Home.css";
 
 
 export default function Home() {
+
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null); // guardará category id o null
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
   const [carrito, setCarrito] = useState([]);
@@ -23,6 +25,9 @@ export default function Home() {
   const [categorias, setCategorias] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showProductModal, setShowProductModal] = useState(false);
 
   const saveTimeout = useRef(null);
   const prevServerCartCountRef = useRef(0);
@@ -65,7 +70,6 @@ export default function Home() {
     return () => { mounted = false; };
   }, []);
 
-  // carrito init (igual que antes)
   useEffect(() => {
     try {
       if (user) {
@@ -133,7 +137,6 @@ export default function Home() {
     return () => { if (saveTimeout.current) clearTimeout(saveTimeout.current); };
   }, [carrito, user]);
 
-  // filtrado por categoria: ahora categoriaSeleccionada guarda id (number) o null
   const productosFiltrados = categoriaSeleccionada
     ? productos.filter((p) => Number(p.categoria_id) === Number(categoriaSeleccionada))
     : productos;
@@ -255,41 +258,26 @@ export default function Home() {
     }
   };
 
+  // Fix: define handleCardClick to open product modal
+  const handleCardClick = (prod) => {
+    setSelectedProduct(prod);
+    setShowProductModal(true);
+  };
 
   return (
-    <Container
-      fluid
-      className="min-vh-100 py-4 px-2"
-      style={{
-        background: "#e0f7fa",
-        border: "2px solid #0097a7",
-        borderRadius: "24px",
-        boxShadow: "0 0 24px #0097a755",
-        color: "#01579b",
-        fontFamily: "Fira Mono, monospace",
-      }}
-    >
-
-      <Row className="align-items-center mb-4">
-        <Col xs="auto" className="d-flex align-items-center">
+    <Container fluid className="futuristic-root futuristic-container">
+ 
+      {/* Header: logo + categorias (izq), título (centro), acciones (derecha) */}
+      <Row className="align-items-center mb-4 futuristic-header">
+         <Col xs="auto" className="d-flex align-items-center gap-3">
           <Dropdown>
-            <Dropdown.Toggle variant="outline-info" style={{ border: "none" }}>
-              <FaBars size={30} />
-              <span className="ms-2 small text-info" style={{ letterSpacing: 1 }}>
-                Categorías
-              </span>
+            <Dropdown.Toggle variant="link" className="text-info p-0" style={{ textDecoration: "none" }}>
+              <FaBars size={22} />
             </Dropdown.Toggle>
             <Dropdown.Menu>
-              <Dropdown.Item
-                key="todas"
-                onClick={() => handleCategoria(null)}
-                active={categoriaSeleccionada === null}
-              >
-                Todas
-              </Dropdown.Item>
+              <Dropdown.Item onClick={() => handleCategoria(null)} active={categoriaSeleccionada === null}>Todas</Dropdown.Item>
               <Dropdown.Divider />
               {categorias.length === 0 ? (
-                // fallback: mostrar algunas categorias hardcode si no hay backend
                 ["Cañas", "Reels", "Señuelos", "Kits"].map((cat) => (
                   <Dropdown.Item
                     key={cat}
@@ -310,124 +298,83 @@ export default function Home() {
                   </Dropdown.Item>
                 ))
               )}
-
             </Dropdown.Menu>
           </Dropdown>
-        </Col>
-        <Col className="text-center">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img
-              src={logo}
-              alt="Logo"
-              style={{
-                height: "54px",
-                marginRight: "16px",
-                filter: "drop-shadow(0 2px 6px #0097a7aa)",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "'Montserrat', 'Fira Mono', monospace",
-                fontWeight: 900,
-                fontSize: "2.8rem",
-                color: "#ff3d00",
-                letterSpacing: 2,
-                textShadow: "0 2px 8px #fff, 0 1px 0 #0097a7, 0 0 12px #ffccbc",
-              }}
-            >
-              Pescasr
-            </span>
-          </div>
-        </Col>
-        <Col xs="auto" className="d-flex align-items-center justify-content-end">
-          <Stack direction="horizontal" gap={2}>
-            {!user ? (
-              <>
-                <Button
-                  variant="outline-info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#0097a7", border: "2px solid #0097a7" }}
-                  onClick={() => navigate("/login")}
-                >
-                  Iniciar sesion
 
-                </Button>
-                <Button
-                  variant="info"
-                  style={{ fontWeight: "bold", borderRadius: "12px", color: "#fff", background: "#0097a7", border: "none" }}
-                  onClick={() => navigate("/register")}
-                >
-                  Registrarse
+          <img src={logo} alt="Logo" className="brand-logo" />
+        </Col>
 
-                </Button>
-              </>
-            ) : (
-              <>
-                <span style={{ fontWeight: "bold", color: "#0097a7" }}>
-                  ¡Hola, {user.username}!
-                </span>
-                <Logout />
-              </>
+        <Col className="text-center d-none d-md-block">
+          <div className="brand-title">Pescasr</div>
+        </Col>
+
+        <Col xs="auto" className="d-flex align-items-center justify-content-end" style={{ marginLeft: "auto", gap: 8 }}>
+          {/* Futuristic action buttons (moved to top-right) */}
+          {!user ? (
+            <>
+              <Button
+                variant="light"
+                onClick={() => navigate("/login")}
+                style={{ borderRadius: 12, padding: "8px 14px", fontWeight: 800, background: "linear-gradient(90deg,#bff8ff,#9a6bff)", color: "#021222", boxShadow: "0 8px 30px rgba(154,107,255,0.12)" }}
+              >
+                Iniciar sesión
+              </Button>
+              <Button
+                variant="outline-light"
+                onClick={() => navigate("/register")}
+                style={{ borderRadius: 12, padding: "8px 14px", fontWeight: 800, color: "#bff8ff", borderColor: "rgba(191,248,255,0.18)" }}
+              >
+                Registrarse
+              </Button>
+            </>
+          ) : (
+            <>
+              <span className="hello" style={{ fontWeight: 800, color: "var(--accent-a, #00e5ff)", marginRight: 8 }}>{user.username}</span>
+              <Logout />
+            </>
+          )}
+
+          <Button
+            variant="dark"
+            onClick={() => { if (!user) setShowLoginModal(true); else setMostrarCarrito(true); }}
+            style={{ marginLeft: 8, position: "relative", borderRadius: 12, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(191,248,255,0.06)" }}
+          >
+            <FaShoppingCart />
+            {carrito.length > 0 && (
+              <span style={{ position: "absolute", top: -6, right: -6, background: "#ff3d00", color: "#fff", borderRadius: "50%", fontSize: "0.75rem", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>
+                {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
+              </span>
             )}
-            <Button
-              variant="outline-info"
-              style={{ border: "none", position: "relative" }}
-              onClick={() => {
-                if (!user) setShowLoginModal(true);
-                else setMostrarCarrito(true);
-              }}
-              disabled={!user}
-
-            >
-              <FaShoppingCart size={30} />
-              {carrito.length > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    background: "#ff3d00",
-                    color: "#fff",
-                    borderRadius: "50%",
-                    fontSize: "0.8rem",
-                    width: 20,
-                    height: 20,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {carrito.reduce((acc, item) => acc + (item.cantidad || 0), 0)}
-
-                </span>
-              )}
-            </Button>
-          </Stack>
+          </Button>
         </Col>
       </Row>
 
-
+      {/* Search */}
       <Row className="justify-content-center mb-5 position-relative">
         <Col md={8}>
-          <InputGroup>
-            <InputGroup.Text className="bg-info text-dark border-0">
-              <FaSearch />
-            </InputGroup.Text>
-            <Form.Control
-              placeholder="Buscar productos..."
-              className="bg-dark text-info border-0"
-              style={{ fontSize: "1.2rem", letterSpacing: 1 }}
-              value={busqueda}
-              onChange={handleBusqueda}
-              autoComplete="off"
-            />
-          </InputGroup>
+          <div className="search-wrap">
+            <InputGroup className="search-group">
+              <InputGroup.Text className="bg-search">
+                <FaSearch />
+              </InputGroup.Text>
+              <Form.Control
+                placeholder="Buscar productos..."
+                className="search-input"
+                style={{ fontSize: "1.05rem", letterSpacing: 0.6 }}
+                value={busqueda}
+                onChange={handleBusqueda}
+                autoComplete="off"
+              />
+            </InputGroup>
+          </div>
           {sugerencias.length > 0 && (
-            <ListGroup className="position-absolute w-100 z-3">
+            <ListGroup className="position-absolute w-100 z-3" style={{ marginTop: 8, boxShadow: "0 12px 40px rgba(2,18,34,0.6)", background: "linear-gradient(180deg, rgba(2,18,34,0.95), rgba(6,24,36,0.95))" }}>
               {sugerencias.map((prod) => (
                 <ListGroup.Item
                   key={prod.nombre}
                   action
                   onClick={() => handleSugerenciaClick(prod.nombre)}
+                  style={{ background: "transparent", color: "#e6fbff" }}
                 >
                   {prod.nombre}
                 </ListGroup.Item>
@@ -437,6 +384,7 @@ export default function Home() {
         </Col>
       </Row>
 
+      {/* Products grid - NO TOCAR (contenido intacto) */}
       <Row className="justify-content-center">
         {cargando ? (
           <Col>
@@ -449,53 +397,34 @@ export default function Home() {
           </Col>
         ) : (
           productosAMostrar.map((prod, idx) => (
+
             <Col key={idx} xs={12} sm={6} md={3} className="mb-4 d-flex justify-content-center">
-              <Card
-                bg="dark"
-                text="info"
-                style={{
-                  width: "15rem",
-                  borderRadius: "28px",
-                  border: "2px solid #b3e0ff",
-                  background: "rgba(35,37,38,0.95)",
-                  color: "#b3e0ff",
-                  boxShadow: "0 2px 12px #b3e0ff22",
-                  padding: 0,
-                  transition: "transform 0.1s",
-                }}
-                className="text-center p-0 product-btn"
-              >
+              <Card className="futuristic-card product-card" onClick={() => handleCardClick(prod)}>
                 <Card.Body>
-                  <Card.Title style={{ fontSize: "1.6rem", fontWeight: "bold", letterSpacing: 1 }}>
-                    {prod.nombre}
-                  </Card.Title>
-                  <Card.Text style={{ fontSize: "1.1rem", color: "#e3f6ff" }}>{prod.descripcion}</Card.Text>
-                  <Card.Text>
-                    <span className="badge bg-info">{prod.categoria}</span>
-                  </Card.Text>
+                  <Card.Title className="product-title">{prod.nombre}</Card.Title>
+                  <Card.Text className="product-desc">{prod.descripcion ? (prod.descripcion.length > 120 ? prod.descripcion.slice(0, 120) + "..." : prod.descripcion) : "Sin descripción"}</Card.Text>
+                  <div className="meta-row">
+                    <span className="category-badge">{prod.categoria}</span>
+                    <span className="product-price">${Number(prod.precio).toLocaleString("es-AR")}</span>
+                  </div>
                   <Button
                     variant="success"
-                    style={{ borderRadius: "12px", fontWeight: "bold" }}
-                    onClick={() => {
-                      if (!user) setShowLoginModal(true);
-                      else agregarAlCarrito(prod);
-                    }}
+                    className="buy-btn"
+                    onClick={(e) => { e.stopPropagation(); if (!user) setShowLoginModal(true); else agregarAlCarrito(prod); }}
                     disabled={!user}
-
                   >
                     Comprar
                   </Button>
                 </Card.Body>
               </Card>
             </Col>
-          ))
-        )}
+          )))}
       </Row>
 
-
+      {/* Product details modal */}
       <Modal
-        show={mostrarCarrito}
-        onHide={() => setMostrarCarrito(false)}
+        show={showProductModal}
+        onHide={() => setShowProductModal(false)}
         centered
         size="lg"
         contentClassName="border-0"
@@ -504,43 +433,46 @@ export default function Home() {
         <Modal.Header
           closeButton
           style={{
-            background: "#e0f7fa",
-            borderBottom: "2px solid #0097a7",
-            color: "#01579b",
+            background: "linear-gradient(90deg, rgba(0,229,255,0.04), rgba(138,92,255,0.03))",
+            borderBottom: "1px solid rgba(191,248,255,0.06)",
+            color: "#e6fbff",
           }}
         >
           <Modal.Title>
-            <FaShoppingCart className="me-2" />
-            Carrito de compras
+            {selectedProduct?.nombre || "Detalle del producto"}
           </Modal.Title>
+
         </Modal.Header>
-        <Modal.Body
-          style={{
-            background: "#e0f7fa",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
-          }}
-        >
-          {carrito.length === 0 ? (
-            <p>El carrito está vacío.</p>
-          ) : (
+        <Modal.Body style={{ background: "linear-gradient(180deg, rgba(2,18,34,0.95), rgba(6,24,36,0.95))", color: "#e6fbff" }}>
+          <p className="product-modal-desc" style={{ whiteSpace: "pre-wrap", color: "#bfefff" }}>{selectedProduct?.descripcion || "No hay descripción para este producto."}</p>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+            <div style={{ fontWeight: 800 }}>{selectedProduct ? `$ ${Number(selectedProduct.precio).toLocaleString("es-AR")}` : ""}</div>
+            <div style={{ color: "var(--muted)" }}>{selectedProduct ? selectedProduct.categoria : ""} • Stock: {selectedProduct?.stock ?? "N/A"}</div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer style={{ background: "transparent", borderTop: "none" }}>
+          <Button variant="secondary" onClick={() => setShowProductModal(false)}>Cerrar</Button>
+          <Button variant="success" onClick={() => { if (!user) { setShowProductModal(false); setShowLoginModal(true); } else { agregarAlCarrito(selectedProduct); setShowProductModal(false); } }}>
+            Agregar al carrito
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cart modal */}
+      <Modal show={mostrarCarrito} onHide={() => setMostrarCarrito(false)} centered size="lg" contentClassName="border-0 futuristic-modal">
+        <Modal.Header closeButton style={{ background: "transparent", borderBottom: "none" }}>
+          <Modal.Title><FaShoppingCart className="me-2" /> Carrito de compras</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {carrito.length === 0 ? <p>El carrito está vacío.</p> : (
             <ListGroup variant="flush">
               {carrito.map((item) => (
-                <ListGroup.Item
-                  key={item.nombre}
-                  style={{
-                    background: "#e0f7fa",
-                    border: "none",
-                    borderBottom: "1px solid #b3e0ff",
-                  }}
-                  className="d-flex align-items-center justify-content-between"
-                >
+                <ListGroup.Item key={item.nombre} className="cart-item">
                   <div>
                     <span style={{ fontWeight: "bold" }}>{item.nombre}</span>
                     <span className="badge bg-info ms-2">{item.categoria}</span>
-                    <div style={{ fontSize: "0.95rem", color: "#0097a7" }}>
+                    <div style={{ fontSize: "0.95rem", color: "#00e5ff" }}>
                       ${Number(item.precio).toLocaleString("es-AR")}
-
                     </div>
                   </div>
                   <div className="d-flex align-items-center">
@@ -550,7 +482,6 @@ export default function Home() {
                       className="me-2"
                       onClick={() => cambiarCantidad(item.nombre, -1)}
                       disabled={!user || item.cantidad === 1}
-
                     >
                       <FaMinus />
                     </Button>
@@ -561,7 +492,6 @@ export default function Home() {
                       className="ms-2"
                       onClick={() => cambiarCantidad(item.nombre, 1)}
                       disabled={!user}
-
                     >
                       <FaPlus />
                     </Button>
@@ -571,7 +501,6 @@ export default function Home() {
                       className="ms-3"
                       onClick={() => quitarDelCarrito(item.nombre)}
                       disabled={!user}
-
                     >
                       <FaTrashAlt />
                     </Button>
@@ -583,10 +512,9 @@ export default function Home() {
         </Modal.Body>
         <Modal.Footer
           style={{
-            background: "#e0f7fa",
-            borderTop: "2px solid #0097a7",
-            color: "#01579b",
-            borderRadius: "0 0 24px 24px",
+            background: "linear-gradient(90deg, rgba(0,229,255,0.02), rgba(138,92,255,0.02))",
+            borderTop: "1px solid rgba(191,248,255,0.04)",
+            color: "#e6fbff",
             justifyContent: "space-between",
           }}
         >
@@ -598,27 +526,19 @@ export default function Home() {
             style={{ borderRadius: "12px", fontWeight: "bold" }}
             disabled={carrito.length === 0 || !user}
             onClick={handleFinalizarCompra}
-
           >
             Finalizar compra
           </Button>
         </Modal.Footer>
       </Modal>
 
+      {/* Login required modal */}
       <Modal show={showLoginModal} onHide={() => setShowLoginModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Iniciar sesión requerido</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>Debes iniciar sesión para usar el carrito. ¿Querés iniciar sesión o registrarte?</p>
-        </Modal.Body>
+        <Modal.Header closeButton><Modal.Title>Iniciar sesión requerido</Modal.Title></Modal.Header>
+        <Modal.Body><p>Debes iniciar sesión para usar el carrito. ¿Querés iniciar sesión o registrarte?</p></Modal.Body>
         <Modal.Footer>
-          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>
-            Registrarse
-          </Button>
-          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>
-            Iniciar sesión
-          </Button>
+          <Button variant="outline-info" onClick={() => { setShowLoginModal(false); navigate("/register"); }}>Registrarse</Button>
+          <Button variant="info" onClick={() => { setShowLoginModal(false); navigate("/login"); }}>Iniciar sesión</Button>
         </Modal.Footer>
       </Modal>
 
