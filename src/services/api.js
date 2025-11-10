@@ -93,7 +93,8 @@ function unwrapResults(data) {
 
 /* Auth */
 export async function loginRequest(username, password) {
-  return request("/users/login/", { method: "POST", body: { username, password } });
+  // SimpleJWT TokenObtainPairView está en /api/token/
+  return request("/token/", { method: "POST", body: { username, password } });
 }
 export async function registerRequest(username, password, email) {
   const body = email ? { username, password, email } : { username, password };
