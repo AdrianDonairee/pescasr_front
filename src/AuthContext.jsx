@@ -16,6 +16,14 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
+        // restore tokens into api headers if exist (prevents 401 on initial getProfile)
+        const access = localStorage.getItem("access_token") || localStorage.getItem("access") || localStorage.getItem("token");
+        const refresh = localStorage.getItem("refresh_token") || localStorage.getItem("refresh");
+        if (access) {
+          // ensure api headers include the access token
+          try { setTokens({ access, refresh }); } catch (e) {}
+        }
+
         const profile = await getProfile();
         if (profile) {
           profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
@@ -23,7 +31,7 @@ export function AuthProvider({ children }) {
           localStorage.setItem("user", JSON.stringify(profile));
         }
       } catch (e) {
-        // no autenticado
+        // no autenticado o token inválido
       }
     })();
   }, []);
