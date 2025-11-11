@@ -10,6 +10,11 @@ import logo from "../../img/logo.png";
 import { getProducts, createOrder, saveCart, getCategories } from "../../services/api";
 import "./Home.css";
 
+function serverCartKeyForUser(user) {
+  if (!user) return "cart_server";
+  const idOrName = (user.id !== undefined && user.id !== null) ? String(user.id) : String(user.username || "unknown");
+  return `cart_server_user_${idOrName}`;
+}
 
 export default function Home() {
 
@@ -73,7 +78,9 @@ export default function Home() {
   useEffect(() => {
     try {
       if (user) {
-        const serverCart = JSON.parse(localStorage.getItem("cart_server") || "[]");
+        // read server cart stored under user-specific key
+        const serverKey = serverCartKeyForUser(user);
+        const serverCart = JSON.parse(localStorage.getItem(serverKey) || "[]");
         prevServerCartCountRef.current = Array.isArray(serverCart) ? serverCart.length : 0;
         if (Array.isArray(serverCart) && serverCart.length > 0) {
           const mapped = serverCart.map((it) => ({
@@ -110,15 +117,16 @@ export default function Home() {
         if (itemsWithIds.length > 0) {
           const res = await saveCart(itemsWithIds);
           const serverItems = res && res.items ? res.items : null;
+          const serverKey = serverCartKeyForUser(user);
           if (serverItems) {
-            localStorage.setItem("cart_server", JSON.stringify(serverItems));
+            localStorage.setItem(serverKey, JSON.stringify(serverItems));
             prevServerCartCountRef.current = serverItems.length;
           } else {
             const serverCache = itemsWithIds.map(i => {
               const p = carrito.find(c => (c.producto_id || c.id) === i.producto_id) || {};
               return { producto: { id: i.producto_id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, categoria: p.categoria }, cantidad: i.cantidad, total: String((Number(p.precio) || 0) * i.cantidad) };
             });
-            localStorage.setItem("cart_server", JSON.stringify(serverCache));
+            localStorage.setItem(serverKey, JSON.stringify(serverCache));
             prevServerCartCountRef.current = serverCache.length;
           }
           return;
@@ -126,7 +134,8 @@ export default function Home() {
 
         if ((carrito || []).length === 0 && prevServerCartCountRef.current > 0) {
           await saveCart([]);
-          localStorage.setItem("cart_server", JSON.stringify([]));
+          const serverKey = serverCartKeyForUser(user);
+          localStorage.setItem(serverKey, JSON.stringify([]));
           prevServerCartCountRef.current = 0;
         }
       } catch (e) {
@@ -250,7 +259,8 @@ export default function Home() {
       setCarrito([]);
       setMostrarCarrito(false);
       alert("¡Gracias por tu compra!");
-      localStorage.setItem("cart_server", JSON.stringify([]));
+      const serverKey = serverCartKeyForUser(user);
+      localStorage.setItem(serverKey, JSON.stringify([]));
       localStorage.setItem("cart_local", JSON.stringify([]));
       prevServerCartCountRef.current = 0;
     } catch (err) {

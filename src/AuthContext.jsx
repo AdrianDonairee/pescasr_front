@@ -3,6 +3,13 @@ import { loginRequest, registerRequest, setTokens, clearAuthTokens, getCart, sav
 
 const AuthContext = createContext();
 
+function serverCartKeyForUser(user) {
+  if (!user) return "cart_server";
+  // prefer id if present, fallback to username
+  const idOrName = (user.id !== undefined && user.id !== null) ? String(user.id) : String(user.username || "unknown");
+  return `cart_server_user_${idOrName}`;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
@@ -38,10 +45,14 @@ export function AuthProvider({ children }) {
 
   async function mergeLocalIntoServerCart() {
     try {
+      // Get server cart from API (requires auth)
       const serverCartRaw = await getCart().catch(() => []);
       const serverCart = Array.isArray(serverCartRaw) ? serverCartRaw : [];
+
+      // Read local temp cart (anonymous)
       const localCart = JSON.parse(localStorage.getItem("cart_local") || "[]") || [];
 
+      // Merge counts by producto_id
       const map = new Map();
       (serverCart || []).forEach(it => {
         const id = it.producto?.id;
@@ -57,12 +68,22 @@ export function AuthProvider({ children }) {
       if (itemsToSend.length > 0) {
         const res = await saveCart(itemsToSend);
         const serverItems = res && res.items ? res.items : itemsToSend.map(i => ({ producto: { id: i.producto_id }, cantidad: i.cantidad }));
-        localStorage.setItem("cart_server", JSON.stringify(serverItems));
-        const leftover = (localCart || []).filter(it => !(it.producto_id || it.id));
-        localStorage.setItem("cart_local", JSON.stringify(leftover));
-      } else {
-        localStorage.setItem("cart_server", JSON.stringify(serverCart || []));
+
+        // persist server cart under per-user key
+        const key = serverCartKeyForUser(await getProfile().catch(() => null) || JSON.parse(localStorage.getItem("user") || "null"));
+        localStorage.setItem(key, JSON.stringify(serverItems));
+
+        // clear the anonymous local cart after merging
+        localStorage.removeItem("cart_local");
+        return;
       }
+
+      // If nothing to send, still store the current serverCart under per-user key
+      const profile = await getProfile().catch(() => null);
+      const key = serverCartKeyForUser(profile || JSON.parse(localStorage.getItem("user") || "null"));
+      localStorage.setItem(key, JSON.stringify(serverCart || []));
+      // remove cart_local to avoid leaking to next user
+      localStorage.removeItem("cart_local");
     } catch (e) {
       try { localStorage.setItem("cart_server", JSON.stringify([])); } catch (err) {}
     }
@@ -71,11 +92,6 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     try {
       const data = await loginRequest(username, password);
-
-      // DEBUG: ver qué devuelve exactamente la API
-      if (process.env.NODE_ENV !== "production") {
-        try { console.debug("[auth] login response:", data); } catch (e) {}
-      }
 
       // extraer token desde varias estructuras posibles
       const access =
@@ -106,6 +122,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem("user", JSON.stringify(usr));
       setUser(usr);
 
+      // merge local temporary cart into server cart for this user
       await mergeLocalIntoServerCart();
       return { ok: true };
     } catch (err) {
@@ -161,6 +178,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    // clear auth tokens and local anonymous cart, but keep server cart per-user intact
     clearAuthTokens();
     setUser(null);
   };

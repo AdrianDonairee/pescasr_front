@@ -8,9 +8,12 @@ export function setTokens({ access, refresh }) {
 }
 
 export function clearAuthTokens() {
+    // quitamos tokens y user, pero NO borramos los carritos de servidor por usuario
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
     localStorage.removeItem("user");
+    // borramos solo el carrito local temporal (para evitar que otro usuario herede el cart_local)
+    localStorage.removeItem("cart_local");
 }
 
 function getAuthHeader() {
@@ -31,7 +34,7 @@ async function request(path, options = {}) {
   };
 
   const AUTH_PREFIX = process.env.REACT_APP_AUTH_PREFIX || "Bearer"; // set to "Token" if backend expects "Token <key>"
-  let access = localStorage.getItem("access_token") || localStorage.getItem("token") || localStorage.getItem("accessToken") || "";
+  let access = localStorage.getItem("access_token") || localStorage.getItem("token") || localStorage.getItem("accessToken") || localStorage.getItem("access") || "";
   access = typeof access === "string" ? access.trim() : (access ? String(access) : "");
   if (access && !["", "null", "undefined"].includes(access.toLowerCase())) {
     const low = access.toLowerCase();
@@ -97,10 +100,8 @@ function unwrapResults(data) {
 
 /* Auth */
 export async function loginRequest(username, password) {
-
   // SimpleJWT TokenObtainPairView está en /api/token/
   return request("/token/", { method: "POST", body: { username, password } });
-
 }
 export async function registerRequest(username, password, email) {
   const body = email ? { username, password, email } : { username, password };
@@ -115,6 +116,7 @@ export async function getCart() {
   return request("/cart/", { method: "GET" });
 }
 export async function saveCart(items) {
+  // items: [{ producto_id, cantidad }, ...]
   return request("/cart/", { method: "POST", body: { items } });
 }
 
