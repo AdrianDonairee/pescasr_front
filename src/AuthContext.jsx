@@ -7,32 +7,32 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        setUser(JSON.parse(stored));
-      }
-    } catch (e) {}
-
     (async () => {
       try {
-        // restore tokens into api headers if exist (prevents 401 on initial getProfile)
-        const access = localStorage.getItem("access_token") || localStorage.getItem("access") || localStorage.getItem("token");
-        const refresh = localStorage.getItem("refresh_token") || localStorage.getItem("refresh");
+        // 1) Try to restore tokens first (so api will send Authorization headers)
+        const access = localStorage.getItem("access") || localStorage.getItem("access_token") || localStorage.getItem("token");
+        const refresh = localStorage.getItem("refresh") || localStorage.getItem("refresh_token");
         if (access) {
-          // ensure api headers include the access token
-          try { setTokens({ access, refresh }); } catch (e) {}
+          try { setTokens({ access, refresh }); } catch (e) { /* ignore */ }
         }
 
+        // 2) Then try to fetch fresh profile from backend
         const profile = await getProfile();
         if (profile) {
           profile.isAdmin = !!(profile.is_superuser || profile.is_staff || profile.isAdmin || profile.role === "admin");
           setUser(profile);
           localStorage.setItem("user", JSON.stringify(profile));
+          return;
         }
       } catch (e) {
-        // no autenticado o token inválido
+        // token invalid/expired or getProfile failed — fall through to fallback
       }
+
+      // 3) Fallback: use stored user if present (no network/token)
+      try {
+        const stored = localStorage.getItem("user");
+        if (stored) setUser(JSON.parse(stored));
+      } catch (e) { /* ignore parse errors */ }
     })();
   }, []);
 

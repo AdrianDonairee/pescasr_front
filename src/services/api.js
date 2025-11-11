@@ -1,17 +1,34 @@
 const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000/api";
 const USE_CREDENTIALS = (process.env.REACT_APP_API_USE_CREDENTIALS === "true");
 
+// helpers mínimos para tokens (no rompen el resto del fichero)
+export function setTokens({ access, refresh }) {
+    if (access) localStorage.setItem("access", access);
+    if (refresh) localStorage.setItem("refresh", refresh);
+}
+
+export function clearAuthTokens() {
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+    localStorage.removeItem("user");
+}
+
+function getAuthHeader() {
+    const token = localStorage.getItem("access");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function buildUrl(path) {
   return `${API_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
 
 async function request(path, options = {}) {
   const url = buildUrl(path);
-  const headers = { ...(options.headers || {}) };
-
-  if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-  }
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+    ...getAuthHeader(),
+  };
 
   const AUTH_PREFIX = process.env.REACT_APP_AUTH_PREFIX || "Bearer"; // set to "Token" if backend expects "Token <key>"
   let access = localStorage.getItem("access_token") || localStorage.getItem("token") || localStorage.getItem("accessToken") || "";
@@ -69,19 +86,6 @@ async function request(path, options = {}) {
   }
 
   return data;
-}
-
-export function setTokens({ access, refresh }) {
-  if (access) localStorage.setItem("access_token", access);
-  if (refresh) localStorage.setItem("refresh_token", refresh);
-}
-
-export function clearAuthTokens() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("user");
-  localStorage.removeItem("cart_local");
-  localStorage.removeItem("cart_server");
 }
 
 function unwrapResults(data) {
