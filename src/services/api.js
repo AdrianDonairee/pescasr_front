@@ -117,7 +117,58 @@ export async function getCart() {
 }
 export async function saveCart(items) {
   // items: [{ producto_id, cantidad }, ...]
-  return request("/cart/", { method: "POST", body: { items } });
+  // Intentos: 1 reintento si el servidor responde que falta algún producto
+  const attempt = async (itemsToSend) => {
+    return request("/cart/", { method: "POST", body: { items: itemsToSend } });
+  };
+
+  try {
+    return await attempt(items);
+  } catch (err) {
+    // sólo manejar 400 con mensajes de producto no encontrado
+    try {
+      if (err && err.status === 400) {
+        const body = err.body || {};
+        const text = typeof body === "string" ? body : JSON.stringify(body);
+        // Buscar ids numéricos en el mensaje "Product 2 not found" u objetos {producto: ["..."]}
+        const missing = new Set();
+        const m = text.matchAll(/Product\s+(\d+)\s+not\s+found/gi);
+        for (const g of m) missing.add(Number(g[1]));
+
+        // también intentar extraer números desde estructuras comunes
+        if (missing.size === 0 && body && typeof body === "object") {
+          // ejemplo: {"producto":[ "Product 2 not found" ]} o {"items":[{"producto": ["Product 2 not found"]}]}
+          const collectMessages = (o) => {
+            if (!o) return [];
+            if (typeof o === "string") return [o];
+            if (Array.isArray(o)) return o.flatMap(collectMessages);
+            if (typeof o === "object") return Object.values(o).flatMap(collectMessages);
+            return [];
+          };
+          const msgs = collectMessages(body);
+          msgs.forEach(s => {
+            const mm = String(s).match(/(\d+)/);
+            if (mm) missing.add(Number(mm[1]));
+          });
+        }
+
+        if (missing.size > 0) {
+          // filtrar items y reintentar
+          const filtered = (items || []).filter(it => !missing.has(Number(it.producto_id)));
+          try {
+            const res = await attempt(filtered);
+            // Si reintento funciona, devolvemos la respuesta y no dejamos items inválidos en localStorage
+            return res;
+          } catch (err2) {
+            throw err2; // propagar si sigue fallando
+          }
+        }
+      }
+    } catch (e) {
+      // ignore parsing errors y propagar el error original
+    }
+    throw err;
+  }
 }
 
 /* Productos / Categorias */

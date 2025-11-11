@@ -115,19 +115,45 @@ export default function Home() {
         })).filter(i => i.producto_id);
 
         if (itemsWithIds.length > 0) {
-          const res = await saveCart(itemsWithIds);
-          const serverItems = res && res.items ? res.items : null;
-          const serverKey = serverCartKeyForUser(user);
-          if (serverItems) {
-            localStorage.setItem(serverKey, JSON.stringify(serverItems));
-            prevServerCartCountRef.current = serverItems.length;
-          } else {
-            const serverCache = itemsWithIds.map(i => {
-              const p = carrito.find(c => (c.producto_id || c.id) === i.producto_id) || {};
-              return { producto: { id: i.producto_id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, categoria: p.categoria }, cantidad: i.cantidad, total: String((Number(p.precio) || 0) * i.cantidad) };
-            });
-            localStorage.setItem(serverKey, JSON.stringify(serverCache));
-            prevServerCartCountRef.current = serverCache.length;
+          try {
+            const res = await saveCart(itemsWithIds);
+            const serverItems = res && res.items ? res.items : null;
+            const serverKey = serverCartKeyForUser(user);
+            if (serverItems) {
+              localStorage.setItem(serverKey, JSON.stringify(serverItems));
+              prevServerCartCountRef.current = serverItems.length;
+            } else {
+              const serverCache = itemsWithIds.map(i => {
+                const p = carrito.find(c => (c.producto_id || c.id) === i.producto_id) || {};
+                return { producto: { id: i.producto_id, nombre: p.nombre, descripcion: p.descripcion, precio: p.precio, categoria: p.categoria }, cantidad: i.cantidad, total: String((Number(p.precio) || 0) * i.cantidad) };
+              });
+              localStorage.setItem(serverKey, JSON.stringify(serverCache));
+              prevServerCartCountRef.current = serverCache.length;
+            }
+          } catch (e) {
+            // Si el servidor devolvió 400 con "Product X not found", el saveCart ya intentó filtrar y reintentar.
+            // Aquí actualizamos el estado local para eliminar items inexistentes si el error lo indica.
+            try {
+              const body = e.body || {};
+              const msgs = JSON.stringify(body);
+              const missing = [...msgs.matchAll(/Product\s+(\d+)\s+not\s+found/gi)].map(g => Number(g[1]));
+              if (missing.length > 0) {
+                // eliminar del carrito local los productos que no existen
+                const filtered = (carrito || []).filter(it => !missing.includes(Number(it.producto_id || it.id)));
+                setCarrito(filtered);
+                // actualizar cart_local para que no reaparezca
+                localStorage.setItem("cart_local", JSON.stringify(filtered));
+                // sincronizar vacío/filtrado con servidor en segundo plano
+                try {
+                  const itemsToSend = filtered.map(f => ({ producto_id: f.producto_id || f.id, cantidad: f.cantidad }));
+                  await saveCart(itemsToSend);
+                } catch (_) { /* ignore */ }
+              } else {
+                console.error("Error sincronizando carrito con servidor:", e);
+              }
+            } catch (xx) {
+              console.error("Error sincronizando carrito con servidor:", e);
+            }
           }
           return;
         }
